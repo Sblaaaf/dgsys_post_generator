@@ -500,3 +500,67 @@ body {
   position: absolute; left: calc(52 * var(--u)); bottom: calc(46 * var(--u)); z-index: 3;
   font-size: calc(20 * var(--u)); font-weight: 600; opacity: .7;
 }
+
+/* ============================ CALQUES LIBRES ============================ */
+
+.slide .layers { position: absolute; inset: 0; z-index: 4; }
+.slide .layer { position: absolute; transform-origin: center; }
+.slide .layer__text { width: 100%; }
+.slide .layer__icon { font-size: calc(var(--layer-icon, 80) * var(--u)); line-height: 1; }
+.slide .layer--icon { display: flex; }
+.slide .layer__icon i { font-size: inherit; }
+.slide .layer__img { width: 100%; height: 100%; background-position: center; background-repeat: no-repeat; }
+.slide .layer__img--empty {
+  background: repeating-linear-gradient(45deg, rgba(128,128,128,.22) 0 10px, rgba(128,128,128,.08) 10px 20px);
+}
+.slide .layer__shape { width: 100%; height: 100%; }
+
+/* Décorations d'édition : retirées du clone avant capture (voir exporter.js),
+   elles n'apparaissent donc jamais dans un fichier exporté. */
+.stage .layer { cursor: grab; }
+.stage .layer:hover { outline: 1px solid rgba(29, 175, 233, .55); outline-offset: 2px; }
+.stage .layer[data-selected="true"] { outline: 2px solid var(--app-accent); outline-offset: 2px; cursor: move; }
+.stage .layer__handle {
+  position: absolute; right: -7px; bottom: -7px; width: 14px; height: 14px;
+  background: #fff; border: 2px solid var(--app-accent); border-radius: 3px;
+  cursor: nwse-resize; z-index: 5;
+}
+
+/* Repères actifs, le temps d'un déplacement */
+.slide .snap-guide {
+  position: absolute; top: 0; bottom: 0; width: 0;
+  border-left: 1px dashed #ff3d8a; z-index: 9; pointer-events: none;
+}
+.slide .snap-guide--h { left: 0; right: 0; top: auto; height: 0; width: auto; border-left: 0; border-top: 1px dashed #ff3d8a; }
+.slide .snap-guide--layer { border-color: #7b5cff; }
+.slide .snap-guide--margin { border-color: #10b981; }
+
+/* Trame permanente */
+.slide .guides { position: absolute; inset: 0; z-index: 8; pointer-events: none; }
+.slide .guides__safe { position: absolute; border: 1px dashed rgba(29, 175, 233, .75); }
+.slide .guides__line { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px solid rgba(29, 175, 233, .35); }
+.slide .guides__line--h { left: 0; right: 0; top: auto; height: 0; width: auto; border-left: 0; border-top: 1px solid rgba(29, 175, 233, .35); }
+.slide .guides__line--center-x,
+.slide .guides__line--center-y { border-color: rgba(255, 61, 138, .5); }
+.slide .guides__line--center-y { left: 0; right: 0; top: 50%; height: 0; width: auto; border-left: 0; border-top: 1px solid rgba(255, 61, 138, .5); }
+.slide .guides__line--third { border-color: rgba(120, 120, 160, .35); }
+
+/* Liste des calques dans le panneau */
+.layer-row {
+  display: flex; align-items: center; gap: 8px; padding: 7px 9px;
+  border: 1px solid var(--app-line); border-radius: 8px; background: #fff; margin-bottom: 6px;
+  cursor: pointer; font-size: .8rem; font-weight: 600;
+}
+.layer-row[data-active="true"] { border-color: var(--app-accent); background: #f0f9fe; }
+.layer-row span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.layer-row i.type { color: var(--app-brand); width: 16px; text-align: center; }
+
+.toolbar__guides { display: flex; align-items: center; gap: 6px; }
+
+.guides-panel {
+  border-bottom: 1px solid var(--app-line); background: #fff; padding: 12px 16px;
+  display: grid; grid-template-columns: 1.4fr 1fr 1fr 1.2fr; gap: 16px; align-items: start;
+}
+.guides-panel .field { margin-bottom: 0; }
+.guides-panel[hidden] { display: none; }
+#guides-toggle[aria-pressed="true"] { background: var(--app-accent); border-color: var(--app-accent); color: #fff; }

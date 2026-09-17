@@ -43,6 +43,8 @@ assets/js/smart.js      Analyse de texte → carrousel (100 % hors ligne)
 assets/js/llm.js        Pont vers un chat ou une API compatible OpenAI
 assets/js/stock.js      Recherche d'images (Openverse, Pexels, Unsplash)
 assets/js/dnd.js        Glisser-déposer : slides et fichiers images
+assets/js/layers.js     Calques libres et calcul d'aimantation (géométrie pure)
+assets/js/canvas.js     Manipulation directe des calques dans l'aperçu
 assets/js/editor.js     Construction du panneau d'édition
 assets/js/exporter.js   Capture et export PNG / ZIP / PDF / JSON
 assets/js/app.js        Assemblage, aperçu, raccourcis
@@ -113,6 +115,36 @@ Les clés d'API sont rangées séparément de l'état du projet : un `.json` exp
 ou partagé ne contient jamais de secret. L'option *Créditer l'auteur des photos*
 incruste la mention sur la slide — c'est exigé par la licence Unsplash.
 
+### Repères et calques libres
+
+Le bouton **Repères** de la barre d'outils affiche la trame : marge de sécurité,
+axes centraux, règle des tiers et colonnes. La marge compte plus qu'il n'y paraît —
+Instagram et TikTok recouvrent les bords avec leur interface, un texte qui y traîne
+devient illisible sur le téléphone.
+
+Quand un template ne suffit pas, ajoutez un **calque libre** depuis la carte de la
+slide : texte, icône, image ou forme. Vous le déplacez à la souris directement dans
+l'aperçu, et il s'aimante aux bords, aux marges, aux axes centraux, aux colonnes et
+**aux arêtes des autres calques** — les repères roses et violets apparaissent le
+temps du déplacement.
+
+| Geste | Effet |
+|---|---|
+| Glisser | Déplacer, avec aimantation |
+| Poignée du coin | Redimensionner |
+| `Alt` pendant le glisser | Suspendre l'aimantation |
+| Flèches | Déplacer de 0,25 % |
+| `Maj` + flèches | Déplacer de 2 % |
+| `Suppr` | Supprimer le calque sélectionné |
+
+Les positions sont stockées en **pourcentages**, jamais en pixels : passer du 4:5
+au 9:16 ne fait pas dériver les calques. Et parce qu'un calque référence un jeton
+de palette (`accent`, `surbrillance`…) plutôt qu'une couleur figée, changer de
+charte le met à jour avec le reste.
+
+Les repères, contours et poignées portent la classe `editor-only` et sont retirés
+du clone avant capture : ils n'apparaissent jamais dans un fichier exporté.
+
 ### Onglet Design
 Format de destination, couleurs de marque (six chartes fournies), logo, police,
 pagination, filigrane.
@@ -170,12 +202,15 @@ déborde. Un triangle d'alerte signale ces slides dans l'aperçu.
 npm test          # node --test test/*.test.js — aucune dépendance
 ```
 
-36 tests couvrant :
+53 tests couvrant :
 - l'analyse de texte — découpage en sections, détection des chiffres clés,
   attribution d'icônes, plafonds d'éléments et de slides ;
 - le rendu — échappement HTML, dimensions d'export, surbrillance ;
 - le pont vers un modèle — extraction du JSON noyé dans du bavardage ou un bloc
-  de code, et filtrage des valeurs hors schéma renvoyées par un modèle.
+  de code, et filtrage des valeurs hors schéma renvoyées par un modèle ;
+- l'aimantation — lignes de référence, choix de la plus proche, seuils,
+  redimensionnement et bornes. C'est de la géométrie pure, volontairement
+  séparée du DOM pour rester testable sans navigateur.
 
 ---
 
@@ -206,6 +241,6 @@ Par ordre de rapport valeur / effort :
 1. **Rendu serveur** avec Playwright ou Satori : exports parfaits (plus de
    contournements `html2canvas`), et génération en masse par API.
 2. **Bibliothèque de marques** : plusieurs chartes enregistrées, une par client.
-3. **Grilles et repères magnétiques** dans l'aperçu, pour aligner des blocs
-   à la main quand le template ne suffit pas.
+3. **Calques partagés** : un bandeau ou une signature répété sur toutes les
+   slides, modifiable en un seul endroit.
 4. **Rendu vidéo** des slides (transitions) pour les Reels, via `ffmpeg.wasm`.

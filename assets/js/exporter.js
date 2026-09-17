@@ -49,6 +49,11 @@ window.DGExport = (function () {
     const clone = slideEl.cloneNode(true);
     clone.style.transform = 'none';
     clone.style.margin = '0';
+    // Les décorations d'édition (repères, contours, poignées) vivent dans la
+    // slide pour se positionner simplement, mais ne doivent jamais être
+    // rastérisées. On les retire du clone, pas de l'original.
+    clone.querySelectorAll('.editor-only').forEach((n) => n.remove());
+    clone.querySelectorAll('[data-selected]').forEach((n) => n.removeAttribute('data-selected'));
     h.innerHTML = '';
     h.appendChild(clone);
 

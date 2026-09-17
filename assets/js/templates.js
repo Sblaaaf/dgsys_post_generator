@@ -326,6 +326,47 @@
     },
   };
 
+  /* ---------- Calques libres ---------- */
+
+  /**
+   * Les calques se superposent au template. Ils sont rendus DANS la slide
+   * (donc exportés), contrairement aux repères et poignées d'édition qui
+   * portent la classe `editor-only` et sont retirés avant capture.
+   */
+  function renderLayers(slide, ctx) {
+    const L = (typeof window !== 'undefined' && window.DGLayers) || null;
+    const list = Array.isArray(slide.layers) ? slide.layers : [];
+    if (!L || !list.length) return '';
+
+    return '<div class="layers">' + list.map((l) => {
+      const box = [
+        `left:${l.x}%`, `top:${l.y}%`, `width:${l.w}%`,
+        l.type === 'text' || l.type === 'icon' ? '' : `height:${l.h}%`,
+        l.rot ? `transform:rotate(${l.rot}deg)` : '',
+        l.opacity != null && l.opacity !== 1 ? `opacity:${l.opacity}` : '',
+      ].filter(Boolean).join(';');
+
+      let inner = '';
+      if (l.type === 'text') {
+        inner = `<div class="layer__text" style="font-size:calc(${Number(l.size) || 40} * var(--u));`
+          + `font-weight:${Number(l.weight) || 800};color:${L.colorCss(l.color)};`
+          + `text-align:${esc(l.align || 'left')};line-height:${Number(l.lineHeight) || 1.15}">${fmt(l.text)}</div>`;
+      } else if (l.type === 'icon') {
+        inner = `<div class="layer__icon" style="color:${L.colorCss(l.color)}">${icon(l.icon)}</div>`;
+      } else if (l.type === 'image') {
+        inner = l.src
+          ? `<div class="layer__img" style="background-image:url('${String(l.src).replace(/'/g, "\\'")}');`
+            + `background-size:${l.fit === 'contain' ? 'contain' : 'cover'};border-radius:calc(${Number(l.radius) || 0} * var(--u))"></div>`
+          : '<div class="layer__img layer__img--empty"></div>';
+      } else {
+        inner = `<div class="layer__shape" style="background:${L.colorCss(l.color)};`
+          + `border-radius:${l.kind === 'circle' ? '50%' : `calc(${Number(l.radius) || 0} * var(--u))`}"></div>`;
+      }
+
+      return `<div class="layer layer--${esc(l.type)}" data-layer="${esc(l.id)}" style="${box}">${inner}</div>`;
+    }).join('') + '</div>';
+  }
+
   /* ---------- Lisibilité automatique ----------
      Une surbrillance blanche sur un accent clair (jaune, orange pâle) tombe
      sous 3:1 et devient illisible. Plutôt que d'imposer une couleur, on
@@ -437,8 +478,8 @@
     return `<div class="slide slide--${esc(slide.layout)}${def.flush ? ' slide--flush' : ''}" `
       + `style="${vars};${extra}" data-id="${esc(slide.id)}" role="img" `
       + `aria-label="${esc((slide.title || def.label).replace(/\*\*/g, ''))}">`
-      + def.render(slide, ctx) + mark + credit + '</div>';
+      + def.render(slide, ctx) + renderLayers(slide, ctx) + mark + credit + '</div>';
   }
 
-  return { LAYOUTS, PALETTES, PALETTE_LABELS, renderSlide, esc, fmt, contrast, readableOn };
+  return { LAYOUTS, PALETTES, PALETTE_LABELS, renderSlide, renderLayers, esc, fmt, contrast, readableOn };
 });

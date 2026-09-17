@@ -57,11 +57,39 @@
         <i class="fa-solid fa-text-height"></i> Auto-ajuster
       </button>
 
+      <button class="btn" id="guides-toggle" aria-pressed="false" title="Afficher la trame et les marges">
+        <i class="fa-solid fa-ruler-combined"></i> Repères
+      </button>
+      <button class="btn btn--ghost" id="guides-more" title="Réglages des repères" aria-label="Réglages des repères">
+        <i class="fa-solid fa-caret-down"></i>
+      </button>
+
       <div class="toolbar__spacer"></div>
 
       <span class="chip" id="count"></span>
       <label for="zoom" style="font-size:.72rem;font-weight:700;color:var(--app-ink-soft)">Zoom</label>
       <input type="range" id="zoom" min="180" max="520" step="10" style="width:120px;accent-color:var(--app-accent)">
+    </div>
+
+    <div class="guides-panel" id="guides-panel" hidden>
+      <div class="field">
+        <label for="g-margin">Marge de sécurité</label>
+        <div class="range">
+          <input type="range" id="g-margin" min="0" max="20" step="1">
+          <output id="g-margin-out"></output>
+        </div>
+        <p class="hint">Instagram et TikTok recouvrent les bords de leur interface : gardez le texte à l’intérieur.</p>
+      </div>
+      <div class="field">
+        <label for="g-cols">Colonnes</label>
+        <select id="g-cols">
+          <option value="0">Aucune</option>
+          <option value="2">2</option><option value="3">3</option>
+          <option value="4">4</option><option value="6">6</option><option value="12">12</option>
+        </select>
+      </div>
+      <label class="switch field"><input type="checkbox" id="g-thirds"> Règle des tiers</label>
+      <label class="switch field"><input type="checkbox" id="g-snap"> Aimantation (Alt pour la suspendre)</label>
     </div>
 
     <div class="board" id="board"></div>
@@ -83,7 +111,9 @@
   <script src="assets/js/llm.js"></script>
   <script src="assets/js/stock.js"></script>
   <script src="assets/js/dnd.js"></script>
+  <script src="assets/js/layers.js"></script>
   <script src="assets/js/exporter.js"></script>
+  <script src="assets/js/canvas.js"></script>
   <script src="assets/js/editor.js"></script>
   <script src="assets/js/app.js"></script>
 </body>

@@ -78,7 +78,9 @@
       stage.style.width = Math.round(st.format.w * scale) + 'px';
       stage.style.height = Math.round(st.format.h * scale) + 'px';
       stage.innerHTML = html;
-      $('.slide', stage).style.transform = `scale(${scale})`;
+      const slideEl = $('.slide', stage);
+      slideEl.style.transform = `scale(${scale})`;
+      slideEl.insertAdjacentHTML('beforeend', window.DGCanvas.renderGuideOverlay(st.options.guides));
 
       frame.appendChild(label);
       frame.appendChild(stage);
@@ -93,6 +95,7 @@
       });
     });
 
+    window.DGCanvas.refresh();
     updateToolbar();
   }
 
@@ -544,6 +547,51 @@ Découvrez nos solutions sur dgsys.fr`;
     $('#undo').addEventListener('click', () => { if (S.undo()) { E.openId = null; renderAll(); } });
     $('#redo').addEventListener('click', () => { if (S.redo()) { E.openId = null; renderAll(); } });
     $('#autofit').addEventListener('click', autoFit);
+
+    // Manipulation directe des calques dans l'aperçu
+    window.DGCanvas.init($('#board'), {
+      onChange: renderPreview,
+      onSelect: () => { if ($('#panel-content').dataset.active === 'true') E.renderContent($('#panel-content')); },
+    });
+
+    // Réglages des repères
+    const g = () => S.get().options.guides;
+    const gToggle = $('#guides-toggle');
+    const gPanel = $('#guides-panel');
+    const syncGuides = () => {
+      const v = g();
+      gToggle.setAttribute('aria-pressed', String(!!v.show));
+      $('#g-margin').value = v.margin;
+      $('#g-margin-out').textContent = v.margin + ' %';
+      $('#g-cols').value = v.cols;
+      $('#g-thirds').checked = !!v.thirds;
+      $('#g-snap').checked = v.snap !== false;
+    };
+    gToggle.addEventListener('click', () => {
+      S.commit((s) => { s.options.guides.show = !s.options.guides.show; });
+      syncGuides();
+      renderPreview();
+    });
+    $('#guides-more').addEventListener('click', () => {
+      gPanel.hidden = !gPanel.hidden;
+    });
+    $('#g-margin').addEventListener('input', (e) => {
+      $('#g-margin-out').textContent = e.target.value + ' %';
+      S.commit((s) => { s.options.guides.margin = Number(e.target.value); }, { silent: true });
+      renderPreview();
+    });
+    $('#g-cols').addEventListener('change', (e) => {
+      S.commit((s) => { s.options.guides.cols = Number(e.target.value); });
+      renderPreview();
+    });
+    $('#g-thirds').addEventListener('change', (e) => {
+      S.commit((s) => { s.options.guides.thirds = e.target.checked; });
+      renderPreview();
+    });
+    $('#g-snap').addEventListener('change', (e) => {
+      S.commit((s) => { s.options.guides.snap = e.target.checked; });
+    });
+    syncGuides();
 
     // Dépôt d'un fichier image directement sur une slide de l'aperçu
     window.DGDnd.initDropZone($('#board'), {

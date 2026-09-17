@@ -230,6 +230,9 @@ window.DGEditor = (function () {
     // Image
     if (def.image) body.appendChild(imageEditor(slide));
 
+    // Calques libres
+    body.appendChild(layersEditor(slide));
+
     // Typographie fine
     body.appendChild(typoEditor(slide));
   }
@@ -548,6 +551,198 @@ window.DGEditor = (function () {
       }
     });
     return b;
+  }
+
+  /* ---------- Calques libres ---------- */
+
+  function layersEditor(slide) {
+    const L = window.DGLayers;
+    const layers = slide.layers || [];
+    const wrap = el(`
+      <div>
+        <div class="section-title"><i class="fa-solid fa-layer-group"></i> Calques libres
+          <span style="margin-left:auto;font-weight:600;text-transform:none;letter-spacing:0">${layers.length}</span>
+        </div>
+        <p class="hint" style="margin-top:-4px;margin-bottom:10px">
+          À superposer au template quand il ne suffit pas. Déplacez-les à la souris
+          dans l’aperçu : ils s’aimantent aux bords, aux centres et aux autres calques.
+          <b>Alt</b> suspend l’aimantation, les flèches déplacent au clavier.
+        </p>
+        <div data-list></div>
+        <div class="btn-grid" data-add></div>
+        <div data-props></div>
+      </div>`);
+
+    const list = $('[data-list]', wrap);
+    layers.forEach((l) => {
+      const active = window.DGCanvas.getSelected() === l.id;
+      const row = el(`
+        <div class="layer-row" data-active="${active}">
+          <i class="type ${esc(L.TYPES[l.type].icon)}"></i>
+          <span>${esc(label(l))}</span>
+          <button class="btn btn--ghost" data-up aria-label="Placer devant"><i class="fa-solid fa-arrow-up"></i></button>
+          <button class="btn btn--ghost btn--danger" data-del aria-label="Supprimer le calque"><i class="fa-regular fa-trash-can"></i></button>
+        </div>`);
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('button')) return;
+        window.DGCanvas.setSelected(active ? null : l.id);
+        onStructure();
+      });
+      $('[data-up]', row).addEventListener('click', () => {
+        S.commit((s) => {
+          const arr = find(s, slide.id).layers;
+          const i = arr.findIndex((x) => x.id === l.id);
+          if (i >= 0 && i < arr.length - 1) arr.push(arr.splice(i, 1)[0]);
+        });
+        onStructure();
+      });
+      $('[data-del]', row).addEventListener('click', () => {
+        S.commit((s) => {
+          const sl = find(s, slide.id);
+          sl.layers = sl.layers.filter((x) => x.id !== l.id);
+        });
+        if (window.DGCanvas.getSelected() === l.id) window.DGCanvas.setSelected(null);
+        onStructure();
+      });
+      list.appendChild(row);
+    });
+
+    const add = $('[data-add]', wrap);
+    Object.keys(L.TYPES).forEach((t) => {
+      const b = el(`<button class="btn"><i class="${esc(L.TYPES[t].icon)}"></i> ${esc(L.TYPES[t].label)}</button>`);
+      b.addEventListener('click', () => {
+        const nl = L.makeLayer(t, { x: 12, y: 60 });
+        S.commit((s) => { find(s, slide.id).layers.push(nl); });
+        window.DGCanvas.setSelected(nl.id);
+        onStructure();
+      });
+      add.appendChild(b);
+    });
+
+    const sel = layers.find((l) => l.id === window.DGCanvas.getSelected());
+    if (sel) $('[data-props]', wrap).appendChild(layerProps(slide, sel));
+
+    return wrap;
+  }
+
+  function label(l) {
+    if (l.type === 'text') return (l.text || 'Texte').replace(/\*\*/g, '').slice(0, 30);
+    if (l.type === 'icon') return (l.icon || '').replace('fa-solid fa-', '');
+    if (l.type === 'image') return l.src ? 'Image' : 'Image (vide)';
+    return l.kind === 'circle' ? 'Cercle' : 'Rectangle';
+  }
+
+  /** Réglages du calque sélectionné. */
+  function layerProps(slide, layer) {
+    const L = window.DGLayers;
+    const box = el(`<div class="stock" style="margin-top:10px"><div class="field-label">Calque sélectionné</div></div>`);
+
+    const bind = (node, key, cast) => {
+      node.addEventListener('input', () => {
+        S.commit((s) => {
+          const l = find(s, slide.id).layers.find((x) => x.id === layer.id);
+          if (l) l[key] = cast ? cast(node.value) : node.value;
+        }, { silent: true });
+        onPreview();
+      });
+      node.addEventListener('change', () => S.commit(() => {}, { reason: 'checkpoint' }));
+    };
+
+    if (layer.type === 'text') {
+      const f = el(`<div class="field"><label>Contenu</label><textarea rows="2"></textarea></div>`);
+      $('textarea', f).value = layer.text || '';
+      bind($('textarea', f), 'text');
+      box.appendChild(f);
+
+      const g = el(`
+        <div class="row">
+          <div class="field"><label>Taille</label>
+            <div class="range"><input type="range" min="16" max="160" step="2" value="${Number(layer.size) || 40}"><output>${Number(layer.size) || 40}</output></div>
+          </div>
+          <div class="field"><label>Graisse</label>
+            <select>
+              <option value="400">Regular</option><option value="600">Semi-bold</option>
+              <option value="800">Extra-bold</option><option value="900">Black</option>
+            </select>
+          </div>
+        </div>`);
+      const r = $('input[type="range"]', g);
+      r.addEventListener('input', () => { r.nextElementSibling.textContent = r.value; });
+      bind(r, 'size', Number);
+      const w = $('select', g);
+      w.value = String(layer.weight || 800);
+      bind(w, 'weight', Number);
+      box.appendChild(g);
+
+      const a = el(`<div class="field"><label>Alignement</label><select>
+        <option value="left">Gauche</option><option value="center">Centré</option><option value="right">Droite</option>
+      </select></div>`);
+      $('select', a).value = layer.align || 'left';
+      bind($('select', a), 'align');
+      box.appendChild(a);
+    }
+
+    if (layer.type === 'icon') {
+      const f = el(`<div class="field"><label>Icône</label><input type="text" value="${esc(layer.icon || '')}"></div>`);
+      bind($('input', f), 'icon');
+      box.appendChild(f);
+    }
+
+    if (layer.type === 'image') {
+      const f = el(`
+        <label class="upload field" style="display:block">
+          <input type="file" accept="image/*" aria-label="Image du calque">
+          <span class="upload__ui" style="padding:9px"><i class="fa-solid fa-arrow-up-from-bracket"></i> ${layer.src ? 'Remplacer' : 'Choisir une image'}</span>
+        </label>`);
+      $('input', f).addEventListener('change', async (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        try {
+          const src = await window.DGExport.readImageFile(file, 1200);
+          S.commit((s) => {
+            const l = find(s, slide.id).layers.find((x) => x.id === layer.id);
+            if (l) l.src = src;
+          });
+          onStructure();
+        } catch (err) { window.DGToast(err.message, 'error'); }
+      });
+      box.appendChild(f);
+    }
+
+    if (layer.type === 'shape') {
+      const f = el(`<div class="field"><label>Forme</label><select>
+        <option value="rect">Rectangle</option><option value="circle">Cercle</option>
+      </select></div>`);
+      $('select', f).value = layer.kind || 'rect';
+      bind($('select', f), 'kind');
+      box.appendChild(f);
+    }
+
+    if (layer.type !== 'image') {
+      const c = el(`<div class="field"><label>Couleur</label><select></select></div>`);
+      const csel = $('select', c);
+      Object.keys(L.COLOR_TOKENS).forEach((k) => csel.add(new Option(L.COLOR_TOKENS[k].label, k, false, k === layer.color)));
+      bind(csel, 'color');
+      box.appendChild(c);
+    }
+
+    const geo = el(`
+      <div class="row">
+        <div class="field"><label>Rotation</label>
+          <div class="range"><input type="range" min="-30" max="30" step="1" value="${Number(layer.rot) || 0}"><output>${Number(layer.rot) || 0}°</output></div>
+        </div>
+        <div class="field"><label>Opacité</label>
+          <div class="range"><input type="range" min="0.1" max="1" step="0.05" value="${layer.opacity != null ? layer.opacity : 1}"><output>${Math.round((layer.opacity != null ? layer.opacity : 1) * 100)} %</output></div>
+        </div>
+      </div>`);
+    const [rot, op] = geo.querySelectorAll('input[type="range"]');
+    rot.addEventListener('input', () => { rot.nextElementSibling.textContent = rot.value + '°'; });
+    bind(rot, 'rot', Number);
+    op.addEventListener('input', () => { op.nextElementSibling.textContent = Math.round(op.value * 100) + ' %'; });
+    bind(op, 'opacity', Number);
+    box.appendChild(geo);
+
+    return box;
   }
 
   /* ---------- Typographie ---------- */

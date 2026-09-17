@@ -73,6 +73,7 @@
       cta: '',
       note: '',
       items: [],
+      layers: [],
       image: { src: null, overlay: 0.6, pos: 'center', zoom: 1, gradient: false, credit: null },
       style: { titleScale: 1, bodyScale: 1, titleWeight: 900, align: 'left', iconShape: 'circle' },
     };
@@ -93,7 +94,11 @@
         logoMode: 'text', // 'text' | 'image' | 'both' | 'none'
         colors: Object.assign({}, BRAND_PRESETS.dgsys.colors),
       },
-      options: { dots: true, watermark: false, hlContrast: 'auto', credits: false },
+      options: {
+        dots: true, watermark: false, hlContrast: 'auto', credits: false,
+        // Réglages des repères : partagés par toutes les slides du document.
+        guides: { show: false, snap: true, margin: 7, cols: 0, thirds: false },
+      },
       slides: [],
     };
   }
@@ -124,6 +129,10 @@
     st.slides = (Array.isArray(raw.slides) ? raw.slides : []).map((s) => makeSlide(s.layout, s));
     st.slides.forEach((s) => {
       s.items = (Array.isArray(s.items) ? s.items : []).map((it) => makeItem(it));
+      s.layers = (Array.isArray(s.layers) ? s.layers : []).map((l) => {
+        const L = (typeof window !== 'undefined' && window.DGLayers) || null;
+        return L ? L.makeLayer(l.type, l) : l;
+      });
       if (!s.id) s.id = newId();
     });
     return st;
