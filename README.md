@@ -44,7 +44,10 @@ assets/js/llm.js        Pont vers un chat ou une API compatible OpenAI
 assets/js/stock.js      Recherche d'images (Openverse, Pexels, Unsplash)
 assets/js/dnd.js        Glisser-déposer : slides et fichiers images
 assets/js/layers.js     Calques libres et calcul d'aimantation (géométrie pure)
-assets/js/canvas.js     Manipulation directe des calques dans l'aperçu
+assets/js/canvas.js     Manipulation directe des calques et des blocs
+assets/js/iconpicker.js Sélecteur d'icônes visuel (modale)
+assets/data/icons.js    Catalogue FontAwesome Free — généré, chargé à la demande
+tools/build-icons.py    Régénère ce catalogue depuis le paquet npm
 assets/js/editor.js     Construction du panneau d'édition
 assets/js/exporter.js   Capture et export PNG / ZIP / PDF / JSON
 assets/js/app.js        Assemblage, aperçu, raccourcis
@@ -115,17 +118,39 @@ Les clés d'API sont rangées séparément de l'état du projet : un `.json` exp
 ou partagé ne contient jamais de secret. L'option *Créditer l'auteur des photos*
 incruste la mention sur la slide — c'est exigé par la licence Unsplash.
 
-### Repères et calques libres
+### Formats et variantes de mise en page
+
+Huit formats, du 9:16 au 1.91:1. Les formats **paysage** (Facebook 1200×630,
+X 1600×900, présentation 1920×1080) ne se contentent pas de changer les
+dimensions : les mises en page basculent en **deux colonnes**, titre à gauche
+et contenu à droite. Empiler un titre au-dessus d'une liste sur 1200 px de
+large gaspillerait la moitié du cadre.
+
+La bascule est automatique au-delà d'un rapport de 1,3, et se force par slide
+depuis *Mise en page → Disposition*. L'option **bandeau de marque** ajoute un
+pied de slide avec logo et baseline — c'est la forme habituelle des visuels
+paysage.
+
+### Blocs déplaçables et calques libres
+
+Les blocs du gabarit — titre, contenu, annotation, logo — suivent la mise en
+page tant qu'on n'y touche pas. **Glissez-en un dans l'aperçu et il se détache** :
+il prend alors sa propre position, et un bouton le remet en place. Rien n'est
+figé, mais rien n'est à positionner à la main non plus tant que le gabarit
+convient.
+
+Les **calques libres** (texte, icône, image, forme) s'ajoutent par-dessus, pour
+ce que le gabarit ne prévoit pas.
+
+Les deux se manipulent de la même façon :
 
 Le bouton **Repères** de la barre d'outils affiche la trame : marge de sécurité,
 axes centraux, règle des tiers et colonnes. La marge compte plus qu'il n'y paraît —
 Instagram et TikTok recouvrent les bords avec leur interface, un texte qui y traîne
 devient illisible sur le téléphone.
 
-Quand un template ne suffit pas, ajoutez un **calque libre** depuis la carte de la
-slide : texte, icône, image ou forme. Vous le déplacez à la souris directement dans
-l'aperçu, et il s'aimante aux bords, aux marges, aux axes centraux, aux colonnes et
-**aux arêtes des autres calques** — les repères roses et violets apparaissent le
+L'aimantation accroche les bords, les marges, les axes centraux, les colonnes et
+**les arêtes des autres objets** — les repères roses et violets apparaissent le
 temps du déplacement.
 
 | Geste | Effet |
@@ -144,6 +169,27 @@ charte le met à jour avec le reste.
 
 Les repères, contours et poignées portent la classe `editor-only` et sont retirés
 du clone avant capture : ils n'apparaissent jamais dans un fichier exporté.
+
+### Choisir une icône
+
+Le bouton d'icône ouvre une **modale de 1881 icônes**, cherchables par nom,
+synonyme ou catégorie, filtrables par style (Solid, Regular, Brands). On clique
+sur ce qu'on voit : plus besoin d'aller relever une classe sur le site de
+FontAwesome.
+
+La recherche comprend le français. Les métadonnées officielles sont en anglais —
+y taper « pain » renvoie des pinceaux (*paint*) — donc un dictionnaire d'alias
+traduit une centaine de termes métier courants : pain, stock, horloge, coût,
+déchet, ampoule…
+
+Le catalogue (164 Ko) est généré par `tools/build-icons.py` depuis le paquet npm
+de FontAwesome, et chargé à la première ouverture seulement : il n'entre pas
+dans le coût de démarrage.
+
+```bash
+npm pack @fortawesome/fontawesome-free@6.5.2 && tar xzf fortawesome-*.tgz
+python3 tools/build-icons.py package/metadata
+```
 
 ### Onglet Design
 Format de destination, couleurs de marque (six chartes fournies), logo, police,
@@ -202,7 +248,7 @@ déborde. Un triangle d'alerte signale ces slides dans l'aperçu.
 npm test          # node --test test/*.test.js — aucune dépendance
 ```
 
-53 tests couvrant :
+66 tests couvrant :
 - l'analyse de texte — découpage en sections, détection des chiffres clés,
   attribution d'icônes, plafonds d'éléments et de slides ;
 - le rendu — échappement HTML, dimensions d'export, surbrillance ;
@@ -210,7 +256,9 @@ npm test          # node --test test/*.test.js — aucune dépendance
   de code, et filtrage des valeurs hors schéma renvoyées par un modèle ;
 - l'aimantation — lignes de référence, choix de la plus proche, seuils,
   redimensionnement et bornes. C'est de la géométrie pure, volontairement
-  séparée du DOM pour rester testable sans navigateur.
+  séparée du DOM pour rester testable sans navigateur ;
+- la recherche d'icônes — classement des résultats, filtres, alias français,
+  et la bonne forme du catalogue généré.
 
 ---
 
@@ -241,6 +289,6 @@ Par ordre de rapport valeur / effort :
 1. **Rendu serveur** avec Playwright ou Satori : exports parfaits (plus de
    contournements `html2canvas`), et génération en masse par API.
 2. **Bibliothèque de marques** : plusieurs chartes enregistrées, une par client.
-3. **Calques partagés** : un bandeau ou une signature répété sur toutes les
-   slides, modifiable en un seul endroit.
+3. **Calques partagés** : un élément répété sur toutes les slides, modifiable
+   en un seul endroit — le bandeau de marque en est un premier cas particulier.
 4. **Rendu vidéo** des slides (transitions) pour les Reels, via `ffmpeg.wasm`.

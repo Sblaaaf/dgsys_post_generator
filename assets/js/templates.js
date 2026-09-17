@@ -77,6 +77,29 @@
     return slide.eyebrow ? `<div class="eyebrow">${esc(slide.eyebrow)}</div>` : '';
   }
 
+  /**
+   * Enveloppe un bloc du template dans une zone déplaçable.
+   *
+   * Tant que la zone n'a pas été déplacée, elle reste dans le flux : c'est le
+   * template qui décide. Dès qu'elle porte une position, son contenu est
+   * retiré du flux et collecté dans `ctx._free`, que renderSlide injecte dans
+   * un conteneur couvrant toute la slide. C'est ce détour qui rend les
+   * pourcentages relatifs à la slide entière, et non au bloc parent — sans
+   * quoi l'aimantation, qui raisonne en % de slide, serait faussée.
+   */
+  function zone(name, slide, ctx, html) {
+    if (!html) return '';
+    const z = (slide.zones || {})[name];
+    if (!z) return `<div class="zone" data-zone="${name}">${html}</div>`;
+    ctx._free.push(
+      `<div class="zone zone--free" data-zone="${name}" `
+      + `style="left:${z.x}%;top:${z.y}%;width:${z.w}%">${html}</div>`);
+    return '';
+  }
+
+  /** Colonnes : empilées en portrait, côte à côte en paysage. */
+  const cols = (head, body) => `<div class="cols"><div class="col">${head}</div><div class="col">${body}</div></div>`;
+
   function items(slide, opts) {
     const o = opts || {};
     const list = (slide.items || []).filter((it) => it && (it.title || it.sub));
@@ -108,12 +131,11 @@
       render: (s, ctx) => `
         ${bg(s)}
         <div class="stack">
-          ${logo(ctx.state)}
+          ${zone('brand', s, ctx, logo(ctx.state))}
           <div class="grow"></div>
-          ${eyebrow(s)}
-          <h1>${fmt(s.title)}</h1>
-          ${s.subtitle ? `<p class="lead" style="margin-top:calc(26 * var(--u))">${fmt(s.subtitle)}</p>` : ''}
-          ${s.note ? `<div style="margin-top:calc(30 * var(--u))">${note(s)}</div>` : ''}
+          ${zone('head', s, ctx, `${eyebrow(s)}<h1>${fmt(s.title)}</h1>`
+            + (s.subtitle ? `<p class="lead">${fmt(s.subtitle)}</p>` : ''))}
+          ${zone('note', s, ctx, note(s))}
         </div>
         ${dots(ctx)}`,
     },
@@ -128,11 +150,11 @@
       defaults: { palette: 'light' },
       render: (s, ctx) => `
         <div class="stack">
-          ${eyebrow(s)}
-          <h2 style="margin-bottom:calc(48 * var(--u))">${fmt(s.title)}</h2>
-          ${items(s, { square: s.style.iconShape === 'square' })}
+          ${cols(
+            zone('head', s, ctx, `${eyebrow(s)}<h2>${fmt(s.title)}</h2>`),
+            zone('body', s, ctx, items(s, { square: s.style.iconShape === 'square' })))}
           <div class="grow"></div>
-          ${note(s, true)}
+          ${zone('note', s, ctx, note(s, true))}
         </div>
         ${dots(ctx)}`,
     },
@@ -147,13 +169,11 @@
       defaults: { palette: 'dark' },
       render: (s, ctx) => `
         <div class="stack">
-          <div class="numrow">
-            <div class="bignum">${esc(s.bignum)}</div>
-            <h2>${fmt(s.title)}</h2>
-          </div>
-          ${items(s, { plain: true, mid: true })}
+          ${cols(
+            zone('head', s, ctx, `<div class="numrow"><div class="bignum">${esc(s.bignum)}</div><h2>${fmt(s.title)}</h2></div>`),
+            zone('body', s, ctx, items(s, { plain: true, mid: true })))}
           <div class="grow"></div>
-          ${note(s)}
+          ${zone('note', s, ctx, note(s))}
         </div>
         ${dots(ctx)}`,
     },
@@ -161,7 +181,7 @@
     split: {
       label: 'Image + liste',
       icon: 'fa-solid fa-table-columns',
-      hint: 'Photo en haut avec titre incrusté, points clés en dessous.',
+      hint: 'Photo d’un côté avec titre incrusté, points clés de l’autre.',
       fields: ['title', 'note'],
       items: { max: 5, sub: true, defaultIcon: 'fa-solid fa-check' },
       image: true,
@@ -170,12 +190,12 @@
       render: (s, ctx) => `
         <div class="half-top${s.image && s.image.src ? '' : ' half-top--solid'}">
           ${bg(s)}
-          <h2 class="on-media">${fmt(s.title)}</h2>
+          ${zone('head', s, ctx, `<h2 class="on-media">${fmt(s.title)}</h2>`)}
         </div>
         <div class="half-bottom">
-          ${items(s, { mid: true })}
+          ${zone('body', s, ctx, items(s, { mid: true }))}
           <div class="grow"></div>
-          ${note(s, true)}
+          ${zone('note', s, ctx, note(s, true))}
         </div>
         ${dots(ctx)}`,
     },
@@ -200,11 +220,11 @@
           </div>`).join('');
         return `
           <div class="stack">
-            ${eyebrow(s)}
-            <h2 style="margin-bottom:calc(44 * var(--u))">${fmt(s.title)}</h2>
-            <div class="grid2">${cards}</div>
+            ${cols(
+              zone('head', s, ctx, `${eyebrow(s)}<h2>${fmt(s.title)}</h2>`),
+              zone('body', s, ctx, `<div class="grid2">${cards}</div>`))}
             <div class="grow"></div>
-            ${note(s, true)}
+            ${zone('note', s, ctx, note(s, true))}
           </div>
           ${dots(ctx)}`;
       },
@@ -227,11 +247,11 @@
           </div>`).join('');
         return `
           <div class="stack">
-            ${eyebrow(s)}
-            ${s.title ? `<h2 style="margin-bottom:calc(52 * var(--u))">${fmt(s.title)}</h2>` : ''}
-            <div class="stats">${rows}</div>
+            ${cols(
+              zone('head', s, ctx, `${eyebrow(s)}${s.title ? `<h2>${fmt(s.title)}</h2>` : ''}`),
+              zone('body', s, ctx, `<div class="stats">${rows}</div>`))}
             <div class="grow"></div>
-            ${note(s, true)}
+            ${zone('note', s, ctx, note(s, true))}
           </div>
           ${dots(ctx)}`;
       },
@@ -257,11 +277,11 @@
           </div>`).join('');
         return `
           <div class="stack">
-            ${eyebrow(s)}
-            <h2 style="margin-bottom:calc(48 * var(--u))">${fmt(s.title)}</h2>
-            <div class="items">${rows}</div>
+            ${cols(
+              zone('head', s, ctx, `${eyebrow(s)}<h2>${fmt(s.title)}</h2>`),
+              zone('body', s, ctx, `<div class="items">${rows}</div>`))}
             <div class="grow"></div>
-            ${note(s)}
+            ${zone('note', s, ctx, note(s))}
           </div>
           ${dots(ctx)}`;
       },
@@ -278,9 +298,9 @@
       render: (s, ctx) => `
         ${bg(s)}
         <div class="stack">
-          <div class="qmark">${icon('fa-solid fa-quote-left')}</div>
-          <h2>${fmt(s.title)}</h2>
-          ${s.subtitle ? `<div class="who">${fmt(s.subtitle)}</div>` : ''}
+          ${zone('head', s, ctx, `<div class="qmark">${icon('fa-solid fa-quote-left')}</div>`
+            + `<h2>${fmt(s.title)}</h2>`
+            + (s.subtitle ? `<div class="who">${fmt(s.subtitle)}</div>` : ''))}
         </div>
         ${dots(ctx)}`,
     },
@@ -296,9 +316,8 @@
       render: (s, ctx) => `
         ${bg(s)}
         <div class="stack">
-          ${eyebrow(s)}
-          <h2>${fmt(s.title)}</h2>
-          ${s.note ? `<div style="margin-top:calc(40 * var(--u))">${note(s)}</div>` : ''}
+          ${zone('head', s, ctx, `${eyebrow(s)}<h2>${fmt(s.title)}</h2>`)}
+          ${zone('note', s, ctx, note(s))}
         </div>
         ${dots(ctx)}`,
     },
@@ -315,12 +334,11 @@
       render: (s, ctx) => `
         <div class="half-top${s.image && s.image.src ? '' : ' half-top--solid'}">
           ${bg(s)}
-          <h2 class="on-media">${fmt(s.title)}</h2>
+          ${zone('head', s, ctx, `<h2 class="on-media">${fmt(s.title)}</h2>`)}
         </div>
         <div class="half-bottom">
           <div class="diag"></div>
-          ${logo(ctx.state)}
-          ${s.cta ? `<div class="cta">${fmt(s.cta)}</div>` : ''}
+          ${zone('brand', s, ctx, logo(ctx.state) + (s.cta ? `<div class="cta">${fmt(s.cta)}</div>` : ''))}
         </div>
         ${dots(ctx)}`,
     },
@@ -412,6 +430,7 @@
       '--panel': c.primary, '--panel-fg': '#ffffff',
       '--card-bg': 'rgba(255,255,255,.10)', '--card-fg': '#ffffff',
       '--on-accent': readableOn(c.accent, c.primary), '--veil-color': c.primary,
+      '--bar-bg': c.primary, '--bar-fg': readableOn(c.primary, c.paper),
     }),
     light: (c, o) => ({
       '--bg': c.paper, '--fg': c.ink, '--accent': c.accent, '--muted': c.muted,
@@ -420,6 +439,7 @@
       '--panel': c.paper, '--panel-fg': c.ink,
       '--card-bg': c.light, '--card-fg': c.ink,
       '--on-accent': readableOn(c.accent, c.primary), '--veil-color': c.primary,
+      '--bar-bg': c.primary, '--bar-fg': readableOn(c.primary, c.paper),
     }),
     accent: (c, o) => ({
       '--bg': c.accent, '--fg': '#ffffff', '--accent': '#ffffff', '--muted': 'rgba(255,255,255,.8)',
@@ -428,6 +448,7 @@
       '--panel': c.primary, '--panel-fg': '#ffffff',
       '--card-bg': 'rgba(255,255,255,.16)', '--card-fg': '#ffffff',
       '--on-accent': readableOn(c.accent, c.primary), '--veil-color': c.accent,
+      '--bar-bg': c.primary, '--bar-fg': readableOn(c.primary, c.paper),
     }),
     soft: (c, o) => ({
       '--bg': c.light, '--fg': c.primary, '--accent': c.accent, '--muted': c.muted,
@@ -436,7 +457,13 @@
       '--panel': c.light, '--panel-fg': c.primary,
       '--card-bg': c.paper, '--card-fg': c.primary,
       '--on-accent': readableOn(c.accent, c.primary), '--veil-color': c.primary,
+      '--bar-bg': c.primary, '--bar-fg': readableOn(c.primary, c.paper),
     }),
+  };
+
+  /** Noms lisibles des zones, pour le panneau d'édition. */
+  const ZONE_LABELS = {
+    head: 'Titre', body: 'Contenu', note: 'Annotation', brand: 'Logo / marque',
   };
 
   const PALETTE_LABELS = { dark: 'Fond foncé', light: 'Fond clair', accent: 'Fond accent', soft: 'Fond doux' };
@@ -457,6 +484,11 @@
       pal['--on-accent'] = '#ffffff';
     }
 
+    // Les zones détachées sont collectées pendant le rendu puis injectées dans
+    // un conteneur couvrant la slide : leurs pourcentages restent ainsi
+    // relatifs au cadre entier, comme ceux des calques.
+    ctx._free = [];
+
     const vars = Object.keys(pal).map((k) => `${k}:${pal[k]}`).join(';');
     const st = slide.style || {};
     const extra = [
@@ -467,19 +499,51 @@
       `--brand-font:'${ctx.state.brand.font || 'Inter'}'`,
     ].join(';');
 
-    const mark = ctx.state.options.watermark && ctx.state.brand.website
+    // Variante de mise en page. « auto » suit le cadre : au-delà de 1,3 de
+    // rapport, empiler titre et contenu gaspille la largeur — on passe en
+    // deux colonnes, comme le ferait un maquettiste.
+    const ratio = fmtDef.w / fmtDef.h;
+    const variant = slide.variant && slide.variant !== 'auto'
+      ? slide.variant
+      : (ratio >= 1.3 ? 'split' : 'stack');
+
+    const body = def.render(slide, ctx);
+    const free = ctx._free.length ? `<div class="zones">${ctx._free.join('')}</div>` : '';
+
+    const mark = opts.watermark && ctx.state.brand.website
       ? `<div class="mark">${esc(ctx.state.brand.website)}</div>` : '';
 
     // Certaines licences (Unsplash notamment) imposent de créditer l'auteur.
     const cr = slide.image && slide.image.credit;
-    const credit = ctx.state.options.credits && cr && cr.author
+    const credit = opts.credits && cr && cr.author
       ? `<div class="credit">© ${esc(cr.author)}${cr.source ? ' · ' + esc(cr.source) : ''}</div>` : '';
 
-    return `<div class="slide slide--${esc(slide.layout)}${def.flush ? ' slide--flush' : ''}" `
-      + `style="${vars};${extra}" data-id="${esc(slide.id)}" role="img" `
+    const bar = opts.brandBar && slide.brandBar !== false ? brandBar(ctx.state) : '';
+
+    const cls = [
+      'slide', `slide--${esc(slide.layout)}`,
+      def.flush ? 'slide--flush' : '',
+      `is-${variant}`,
+      ratio >= 1.3 ? 'is-wide' : 'is-tall',
+      bar ? 'has-bar' : '',
+    ].filter(Boolean).join(' ');
+
+    return `<div class="${cls}" style="${vars};${extra}" data-id="${esc(slide.id)}" role="img" `
       + `aria-label="${esc((slide.title || def.label).replace(/\*\*/g, ''))}">`
-      + def.render(slide, ctx) + renderLayers(slide, ctx) + mark + credit + '</div>';
+      + body + free + renderLayers(slide, ctx) + bar + mark + credit + '</div>';
   }
 
-  return { LAYOUTS, PALETTES, PALETTE_LABELS, renderSlide, renderLayers, esc, fmt, contrast, readableOn };
+  /** Bandeau de marque : logo, filet, baseline. Surtout utile en paysage. */
+  function brandBar(state) {
+    const b = state.brand || {};
+    const l = logo(state, true);
+    if (!l && !b.baseline) return '';
+    return '<div class="brandbar">'
+      + (l ? `<div class="brandbar__logo">${l}</div>` : '')
+      + (l && b.baseline ? '<div class="brandbar__rule"></div>' : '')
+      + (b.baseline ? `<div class="brandbar__text">${fmt(b.baseline)}</div>` : '')
+      + '</div>';
+  }
+
+  return { LAYOUTS, PALETTES, PALETTE_LABELS, renderSlide, renderLayers, esc, fmt, contrast, readableOn, ZONE_LABELS };
 });

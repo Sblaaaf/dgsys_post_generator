@@ -15,13 +15,19 @@
   const STORAGE_KEY = 'dgsys.carousel.v1';
   const SCHEMA_VERSION = 1;
 
-  /* ---------- Formats d'export ---------- */
+  /* ---------- Formats d'export ----------
+     Les formats paysage basculent automatiquement les mises en page en deux
+     colonnes (voir `variant` dans templates.js) : empiler titre et contenu
+     sur 1200 px de large gaspillerait la moitié du cadre. */
   const FORMATS = {
-    'ig-portrait':  { label: 'Instagram / LinkedIn portrait (4:5)', w: 1080, h: 1350 },
-    'ig-square':    { label: 'Carré (1:1)',                         w: 1080, h: 1080 },
-    'story':        { label: 'Story / Reels / TikTok (9:16)',        w: 1080, h: 1920 },
-    'li-landscape': { label: 'LinkedIn paysage (16:9)',              w: 1920, h: 1080 },
-    'pinterest':    { label: 'Pinterest (2:3)',                      w: 1000, h: 1500 },
+    'ig-portrait':  { label: 'Instagram / LinkedIn portrait (4:5)',   w: 1080, h: 1350 },
+    'ig-square':    { label: 'Carré (1:1)',                           w: 1080, h: 1080 },
+    'story':        { label: 'Story / Reels / TikTok (9:16)',          w: 1080, h: 1920 },
+    'pinterest':    { label: 'Pinterest (2:3)',                        w: 1000, h: 1500 },
+    'fb-link':      { label: 'Facebook / LinkedIn — lien (1.91:1)',    w: 1200, h: 630 },
+    'fb-post':      { label: 'Facebook — publication (1.91:1 large)',  w: 1640, h: 856 },
+    'x-post':       { label: 'X / Twitter (16:9)',                     w: 1600, h: 900 },
+    'li-landscape': { label: 'Présentation paysage (16:9)',            w: 1920, h: 1080 },
   };
 
   /* ---------- Chartes prêtes à l'emploi ---------- */
@@ -74,6 +80,11 @@
       note: '',
       items: [],
       layers: [],
+      // Positions des blocs du template que l'utilisateur a détachés.
+      // Vide = le template décide, ce qui reste le cas le plus fréquent.
+      zones: {},
+      variant: 'auto',   // 'auto' | 'stack' | 'split'
+      brandBar: true,    // participe au bandeau de marque global
       image: { src: null, overlay: 0.6, pos: 'center', zoom: 1, gradient: false, credit: null },
       style: { titleScale: 1, bodyScale: 1, titleWeight: 900, align: 'left', iconShape: 'circle' },
     };
@@ -92,10 +103,12 @@
         font: 'Inter',
         logoSrc: null,
         logoMode: 'text', // 'text' | 'image' | 'both' | 'none'
+        baseline: '',
         colors: Object.assign({}, BRAND_PRESETS.dgsys.colors),
       },
       options: {
         dots: true, watermark: false, hlContrast: 'auto', credits: false,
+        brandBar: false,
         // Réglages des repères : partagés par toutes les slides du document.
         guides: { show: false, snap: true, margin: 7, cols: 0, thirds: false },
       },
@@ -129,6 +142,7 @@
     st.slides = (Array.isArray(raw.slides) ? raw.slides : []).map((s) => makeSlide(s.layout, s));
     st.slides.forEach((s) => {
       s.items = (Array.isArray(s.items) ? s.items : []).map((it) => makeItem(it));
+      s.zones = (s.zones && typeof s.zones === 'object') ? s.zones : {};
       s.layers = (Array.isArray(s.layers) ? s.layers : []).map((l) => {
         const L = (typeof window !== 'undefined' && window.DGLayers) || null;
         return L ? L.makeLayer(l.type, l) : l;

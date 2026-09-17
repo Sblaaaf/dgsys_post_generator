@@ -1,16 +1,19 @@
 /* =========================================================================
-   canvas.js — Manipulation directe des calques dans l'aperçu
+   canvas.js — Manipulation directe dans l'aperçu
    -------------------------------------------------------------------------
-   Déplacement et redimensionnement à la souris, avec aimantation et repères.
-   Tout est exprimé en pourcentages de la slide : la position reste correcte
-   quel que soit le zoom de l'aperçu ou le format d'export.
+   Deux familles d'objets se manipulent de la même façon :
 
-   Les repères, le contour de sélection et les poignées portent la classe
-   `editor-only` : l'exporteur les retire du clone avant capture, ils
-   n'apparaissent donc jamais dans un fichier.
+   - les CALQUES, ajoutés par-dessus le template, toujours en position libre ;
+   - les ZONES du template (titre, contenu, annotation, logo), qui suivent la
+     mise en page tant qu'on n'y touche pas. Les glisser les « détache » :
+     elles prennent alors une position propre, et un bouton permet de les
+     ré-ancrer.
 
-   Accessibilité : un calque sélectionné se déplace aussi aux flèches du
-   clavier (Maj pour un pas large), et se supprime avec Suppr.
+   Tout est en pourcentages de la slide, jamais en pixels : l'aperçu est zoomé
+   et le format d'export variable.
+
+   Les repères, contours et poignées portent `editor-only` — l'exporteur les
+   retire du clone avant capture.
    ========================================================================= */
 window.DGCanvas = (function () {
   'use strict';
@@ -19,10 +22,9 @@ window.DGCanvas = (function () {
   const L = window.DGLayers;
 
   let hooks = { onChange: () => {}, onSelect: () => {} };
-  let selected = null;   // id du calque sélectionné
+  let selected = null;   // { kind: 'layer'|'zone', key: string } ou null
   let drag = null;
 
-  const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 
   function init(board, h) {
@@ -31,22 +33,20 @@ window.DGCanvas = (function () {
     document.addEventListener('keydown', onKeyDown);
   }
 
-  const setSelected = (id) => { selected = id; hooks.onSelect(id); };
   const getSelected = () => selected;
+  const isSelected = (kind, key) => !!selected && selected.kind === kind && selected.key === key;
 
-  /* --------------------------- Repères permanents --------------------------- */
+  function setSelected(sel) {
+    selected = sel && sel.key ? sel : null;
+    hooks.onSelect(selected);
+  }
 
-  /**
-   * Trame affichée en continu (grille, marges, tiers) : purement visuelle,
-   * elle n'a pas d'incidence sur l'aimantation, qui reste toujours active
-   * selon le réglage `snap`.
-   */
+  /* ---------------------------- Repères ---------------------------- */
+
   function renderGuideOverlay(g) {
     if (!g || !g.show) return '';
     let out = '<div class="guides editor-only" aria-hidden="true">';
-    if (g.margin > 0) {
-      out += `<div class="guides__safe" style="inset:${g.margin}% ${g.margin}%"></div>`;
-    }
+    if (g.margin > 0) out += `<div class="guides__safe" style="inset:${g.margin}% ${g.margin}%"></div>`;
     out += '<div class="guides__line guides__line--center-x" style="left:50%"></div>';
     out += '<div class="guides__line guides__line--center-y" style="top:50%"></div>';
     if (g.thirds) {
@@ -64,7 +64,6 @@ window.DGCanvas = (function () {
     return out + '</div>';
   }
 
-  /** Repères actifs, affichés le temps d'un déplacement. */
   function paintSnapGuides(slideEl, guides) {
     $$('.snap-guide', slideEl).forEach((n) => n.remove());
     guides.forEach((g) => {
@@ -77,91 +76,109 @@ window.DGCanvas = (function () {
     });
   }
 
-  /* --------------------------- Sélection et décorations --------------------------- */
+  /* ---------------------------- Décorations ---------------------------- */
 
   function decorate(slideEl) {
-    $$('.layer', slideEl).forEach((el) => {
-      const on = el.dataset.layer === selected;
+    $$('.layer, .zone', slideEl).forEach((el) => {
+      const kind = el.classList.contains('layer') ? 'layer' : 'zone';
+      const key = kind === 'layer' ? el.dataset.layer : el.dataset.zone;
+      const on = isSelected(kind, key);
       el.dataset.selected = String(on);
-      $$('.layer__handle', el).forEach((n) => n.remove());
-      if (on) {
+      $$('.layer__handle, .zone__handle', el).forEach((n) => n.remove());
+      // Le redimensionnement n'a de sens qu'une fois l'objet détaché du flux.
+      const resizable = kind === 'layer' || el.classList.contains('zone--free');
+      if (on && resizable) {
         const h = document.createElement('div');
-        h.className = 'layer__handle editor-only';
+        h.className = (kind === 'layer' ? 'layer__handle' : 'zone__handle') + ' editor-only';
         h.dataset.resize = '1';
         el.appendChild(h);
       }
     });
   }
 
-  function refresh() {
-    $$('#board .slide').forEach(decorate);
-  }
+  const refresh = () => $$('#board .slide').forEach(decorate);
 
-  /* --------------------------- Interaction --------------------------- */
+  /* ---------------------------- Géométrie ---------------------------- */
 
-  function slideIndexOf(el) {
+  const slideIndexOf = (el) => {
     const frame = el.closest('.frame');
     return frame ? Array.from(frame.parentNode.children).indexOf(frame) : -1;
+  };
+
+  /** Rectangle d'un élément en % de la slide, mesuré à l'écran. */
+  function measure(el, slideRect) {
+    const r = el.getBoundingClientRect();
+    return {
+      x: ((r.left - slideRect.left) / slideRect.width) * 100,
+      y: ((r.top - slideRect.top) / slideRect.height) * 100,
+      w: (r.width / slideRect.width) * 100,
+      h: (r.height / slideRect.height) * 100,
+    };
   }
 
+  /** Rectangles des autres objets de la slide, pour l'aimantation. */
+  function siblings(slideEl, slideRect, skipEl) {
+    return $$('.layer, .zone', slideEl)
+      .filter((n) => n !== skipEl && !n.contains(skipEl) && !skipEl.contains(n))
+      .map((n) => measure(n, slideRect));
+  }
+
+  /* ---------------------------- Interaction ---------------------------- */
+
   function onPointerDown(e) {
-    const layerEl = e.target.closest('.layer');
     const slideEl = e.target.closest('.slide');
     if (!slideEl) return;
 
-    if (!layerEl) {                       // clic dans le vide : on désélectionne
+    const el = e.target.closest('.layer') || e.target.closest('.zone');
+    if (!el) {
       if (selected) { setSelected(null); refresh(); }
       return;
     }
 
+    const kind = el.classList.contains('layer') ? 'layer' : 'zone';
+    const key = kind === 'layer' ? el.dataset.layer : el.dataset.zone;
     const idx = slideIndexOf(slideEl);
-    const slide = S.get().slides[idx];
-    if (!slide) return;
-    const layer = (slide.layers || []).find((l) => l.id === layerEl.dataset.layer);
-    if (!layer) return;
+    if (idx < 0 || !S.get().slides[idx]) return;
 
     e.preventDefault();
-    if (selected !== layer.id) { setSelected(layer.id); refresh(); }
+    if (!isSelected(kind, key)) { setSelected({ kind, key }); refresh(); }
 
-    // Échelle réelle de l'aperçu : indispensable pour convertir des pixels
-    // écran en pourcentages de slide.
-    const rect = slideEl.getBoundingClientRect();
-    const resizing = !!e.target.closest('[data-resize]');
+    const slideRect = slideEl.getBoundingClientRect();
+    const free = kind === 'layer' || el.classList.contains('zone--free');
 
     drag = {
-      idx, slideEl, layerEl, id: layer.id, resizing,
+      idx, kind, key, el, slideEl,
+      resizing: !!e.target.closest('[data-resize]'),
+      // Une zone encore dans le flux ne réagit pas à `left`/`top` : on la
+      // déplace visuellement par `transform`, et c'est le commit final qui
+      // la détache réellement.
+      useTransform: !free,
       startX: e.clientX, startY: e.clientY,
-      rect0: { x: layer.x, y: layer.y, w: layer.w, h: measuredH(layerEl, rect) },
-      pxW: rect.width, pxH: rect.height,
+      rect0: measure(el, slideRect),
+      others: siblings(slideEl, slideRect, el),
+      pxW: slideRect.width, pxH: slideRect.height,
+      localPerPx: S.get().format.w / slideRect.width,
       moved: false,
     };
-    layerEl.setPointerCapture(e.pointerId);
-    layerEl.addEventListener('pointermove', onPointerMove);
-    layerEl.addEventListener('pointerup', onPointerUp, { once: true });
-    layerEl.addEventListener('pointercancel', onPointerUp, { once: true });
-  }
 
-  /** Les calques texte et icône ont une hauteur automatique : on la mesure. */
-  function measuredH(layerEl, slideRect) {
-    const r = layerEl.getBoundingClientRect();
-    return slideRect.height ? (r.height / slideRect.height) * 100 : 10;
+    el.setPointerCapture(e.pointerId);
+    el.addEventListener('pointermove', onPointerMove);
+    el.addEventListener('pointerup', onPointerUp, { once: true });
+    el.addEventListener('pointercancel', onPointerUp, { once: true });
   }
 
   function onPointerMove(e) {
     if (!drag) return;
     const dx = ((e.clientX - drag.startX) / drag.pxW) * 100;
     const dy = ((e.clientY - drag.startY) / drag.pxH) * 100;
-    if (Math.abs(dx) + Math.abs(dy) < 0.05) return;
+    if (!drag.moved && Math.abs(dx) + Math.abs(dy) < 0.15) return;
     drag.moved = true;
 
     const st = S.get();
-    const slide = st.slides[drag.idx];
-    const others = (slide.layers || []).filter((l) => l.id !== drag.id).map((l) => ({ x: l.x, y: l.y, w: l.w, h: l.h }));
-
-    // Alt (ou Option) suspend momentanément l'aimantation — convention
-    // partagée par la plupart des éditeurs graphiques.
     const g = st.options.guides || {};
     const opts = {
+      // Alt suspend l'aimantation le temps du geste : convention des
+      // éditeurs graphiques, plus pratique qu'un réglage à décocher.
       enabled: g.snap !== false && !e.altKey,
       margin: g.margin || 0,
       cols: g.cols || 0,
@@ -170,24 +187,29 @@ window.DGCanvas = (function () {
       thresholdY: (8 / drag.pxH) * 100,
     };
 
+    const r0 = drag.rect0;
     let next;
     if (drag.resizing) {
-      const r = L.snapResize({ x: drag.rect0.x, y: drag.rect0.y, w: drag.rect0.w + dx, h: drag.rect0.h + dy }, others, opts);
-      next = { x: drag.rect0.x, y: drag.rect0.y, w: r.w, h: r.h, guides: r.guides };
+      const r = L.snapResize({ x: r0.x, y: r0.y, w: r0.w + dx, h: r0.h + dy }, drag.others, opts);
+      next = { x: r0.x, y: r0.y, w: r.w, h: r.h, guides: r.guides };
     } else {
-      const r = L.snapMove({ x: drag.rect0.x + dx, y: drag.rect0.y + dy, w: drag.rect0.w, h: drag.rect0.h }, others, opts);
-      next = { x: r.x, y: r.y, w: drag.rect0.w, h: drag.rect0.h, guides: r.guides };
+      const r = L.snapMove({ x: r0.x + dx, y: r0.y + dy, w: r0.w, h: r0.h }, drag.others, opts);
+      next = { x: r.x, y: r.y, w: r0.w, h: r0.h, guides: r.guides };
     }
 
     const c = L.clamp(next);
-    // Retour visuel immédiat sans repasser par un rendu complet : à 60 images
-    // par seconde, reconstruire le DOM serait perceptible.
-    drag.layerEl.style.left = c.x + '%';
-    drag.layerEl.style.top = c.y + '%';
-    if (drag.resizing) {
-      drag.layerEl.style.width = c.w + '%';
-      if (!drag.layerEl.classList.contains('layer--text') && !drag.layerEl.classList.contains('layer--icon')) {
-        drag.layerEl.style.height = c.h + '%';
+    if (drag.useTransform) {
+      const lx = ((c.x - r0.x) / 100) * st.format.w;
+      const ly = ((c.y - r0.y) / 100) * st.format.h;
+      drag.el.style.transform = `translate(${lx}px, ${ly}px)`;
+    } else {
+      drag.el.style.left = c.x + '%';
+      drag.el.style.top = c.y + '%';
+      if (drag.resizing) {
+        drag.el.style.width = c.w + '%';
+        const isBox = drag.kind === 'layer'
+          && !drag.el.classList.contains('layer--text') && !drag.el.classList.contains('layer--icon');
+        if (isBox) drag.el.style.height = c.h + '%';
       }
     }
     drag.next = c;
@@ -198,22 +220,33 @@ window.DGCanvas = (function () {
     if (!drag) return;
     const d = drag;
     drag = null;
-    d.layerEl.removeEventListener('pointermove', onPointerMove);
+    d.el.removeEventListener('pointermove', onPointerMove);
     $$('.snap-guide', d.slideEl).forEach((n) => n.remove());
-    if (!d.moved || !d.next) return;
+    if (!d.moved || !d.next) { d.el.style.transform = ''; return; }
 
     S.commit((s) => {
-      const l = (s.slides[d.idx].layers || []).find((x) => x.id === d.id);
-      if (!l) return;
-      l.x = round(d.next.x); l.y = round(d.next.y);
-      if (d.resizing) { l.w = round(d.next.w); l.h = round(d.next.h); }
+      const slide = s.slides[d.idx];
+      if (!slide) return;
+      if (d.kind === 'layer') {
+        const l = (slide.layers || []).find((x) => x.id === d.key);
+        if (!l) return;
+        l.x = round(d.next.x); l.y = round(d.next.y);
+        if (d.resizing) { l.w = round(d.next.w); l.h = round(d.next.h); }
+      } else {
+        const prev = slide.zones[d.key];
+        slide.zones[d.key] = {
+          x: round(d.next.x),
+          y: round(d.next.y),
+          w: round(d.resizing ? d.next.w : (prev ? prev.w : d.rect0.w)),
+        };
+      }
     });
     hooks.onChange();
   }
 
   const round = (n) => Math.round(n * 100) / 100;
 
-  /* --------------------------- Clavier --------------------------- */
+  /* ---------------------------- Clavier ---------------------------- */
 
   function onKeyDown(e) {
     if (!selected) return;
@@ -221,13 +254,21 @@ window.DGCanvas = (function () {
 
     const st = S.get();
     let idx = -1;
-    st.slides.forEach((s, i) => { if ((s.layers || []).some((l) => l.id === selected)) idx = i; });
-    if (idx < 0) return;
+    st.slides.forEach((s, i) => {
+      if (selected.kind === 'layer'
+        ? (s.layers || []).some((l) => l.id === selected.key)
+        : Object.prototype.hasOwnProperty.call(s.zones || {}, selected.key)) idx = i;
+    });
+    if (idx < 0) return;   // zone encore ancrée : rien à déplacer au clavier
 
     if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault();
       S.commit((s) => {
-        s.slides[idx].layers = s.slides[idx].layers.filter((l) => l.id !== selected);
+        if (selected.kind === 'layer') {
+          s.slides[idx].layers = s.slides[idx].layers.filter((l) => l.id !== selected.key);
+        } else {
+          delete s.slides[idx].zones[selected.key];   // supprimer une zone = la ré-ancrer
+        }
       });
       setSelected(null);
       hooks.onChange();
@@ -238,15 +279,17 @@ window.DGCanvas = (function () {
     const step = steps[e.key];
     if (!step) return;
     e.preventDefault();
-    const amount = e.shiftKey ? 2 : 0.25;   // en % de la slide
+    const amount = e.shiftKey ? 2 : 0.25;
     S.commit((s) => {
-      const l = s.slides[idx].layers.find((x) => x.id === selected);
-      if (!l) return;
-      l.x = round(l.x + step[0] * amount);
-      l.y = round(l.y + step[1] * amount);
+      const t = selected.kind === 'layer'
+        ? s.slides[idx].layers.find((x) => x.id === selected.key)
+        : s.slides[idx].zones[selected.key];
+      if (!t) return;
+      t.x = round(t.x + step[0] * amount);
+      t.y = round(t.y + step[1] * amount);
     });
     hooks.onChange();
   }
 
-  return { init, renderGuideOverlay, refresh, setSelected, getSelected };
+  return { init, renderGuideOverlay, refresh, setSelected, getSelected, isSelected };
 })();

@@ -159,49 +159,30 @@ window.DGEditor = (function () {
 
   /* ---------- Corps d'une carte ---------- */
 
-  function buildBody(body, slide, def, st) {
-    // Ligne 1 : visibilité + layout + palette
-    const head = el(`
-      <div>
-        <label class="switch" style="margin-bottom:12px">
-          <input type="checkbox" ${slide.visible ? 'checked' : ''}> Inclure cette slide dans l’export
-        </label>
-        <div class="row">
-          <div class="field"><label>Mise en page</label><select data-k="layout"></select></div>
-          <div class="field"><label>Fond</label><select data-k="palette"></select></div>
-        </div>
-      </div>`);
+  /** Section repliable. `<details>` natif : accessible, sans une ligne de JS. */
+  function section(title, icon, open, content) {
+    const d = el(`
+      <details class="sect" ${open ? 'open' : ''}>
+        <summary><i class="${esc(icon)}" aria-hidden="true"></i> ${esc(title)}</summary>
+        <div class="sect__body"></div>
+      </details>`);
+    $('.sect__body', d).appendChild(content);
+    return d;
+  }
 
-    $('.switch input', head).addEventListener('change', (e) => {
+  function buildBody(body, slide, def, st) {
+    const vis = el(`
+      <label class="switch sect-top">
+        <input type="checkbox" ${slide.visible ? 'checked' : ''}> Inclure cette slide dans l’export
+      </label>`);
+    $('input', vis).addEventListener('change', (e) => {
       S.commit((s) => { find(s, slide.id).visible = e.target.checked; });
       onStructure();
     });
+    body.appendChild(vis);
 
-    const layoutSel = head.querySelector('[data-k="layout"]');
-    Object.keys(T.LAYOUTS).forEach((k) => layoutSel.add(new Option(T.LAYOUTS[k].label, k, false, k === slide.layout)));
-    layoutSel.addEventListener('change', (e) => {
-      S.commit((s) => {
-        const sl = find(s, slide.id);
-        sl.layout = e.target.value;
-        const d = T.LAYOUTS[e.target.value];
-        // On applique les réglages par défaut du nouveau layout sans écraser le texte
-        if (d.defaults) Object.assign(sl, S.deepMerge({ palette: sl.palette, image: sl.image }, d.defaults));
-        if (d.items && !sl.items.length) {
-          sl.items.push(S.makeItem({ icon: d.items.defaultIcon || 'fa-solid fa-check', title: 'Point clé 1' }));
-        }
-      });
-      onStructure();
-    });
-
-    const palSel = head.querySelector('[data-k="palette"]');
-    Object.keys(T.PALETTES).forEach((k) => palSel.add(new Option(T.PALETTE_LABELS[k], k, false, k === slide.palette)));
-    palSel.addEventListener('change', (e) => {
-      S.commit((s) => { find(s, slide.id).palette = e.target.value; }, { silent: false });
-      onPreview();
-    });
-    body.appendChild(head);
-
-    // Champs texte
+    // --- Contenu ---
+    const content = el('<div></div>');
     def.fields.forEach((key) => {
       const m = FIELD_META[key];
       if (!m) return;
@@ -218,23 +199,121 @@ window.DGEditor = (function () {
         S.commit((s) => { find(s, slide.id)[key] = input.value; }, { silent: true });
         onPreview();
       });
-      // Un point d'annulation est posé quand l'utilisateur quitte le champ,
-      // pas à chaque caractère : Ctrl+Z annule une phrase, pas une lettre.
+      // Point d'annulation à la sortie du champ, pas à chaque caractère :
+      // Ctrl+Z annule une phrase, pas une lettre.
       input.addEventListener('change', () => S.commit(() => {}, { reason: 'checkpoint' }));
-      body.appendChild(f);
+      content.appendChild(f);
+    });
+    if (def.items) content.appendChild(itemsEditor(slide, def));
+    body.appendChild(section('Contenu', 'fa-solid fa-pen', true, content));
+
+    // --- Mise en page ---
+    body.appendChild(section('Mise en page', 'fa-solid fa-table-cells', false, layoutEditor(slide, def, st)));
+
+    // --- Image ---
+    if (def.image) body.appendChild(section('Image', 'fa-regular fa-image', false, imageEditor(slide)));
+
+    // --- Calques ---
+    const nLayers = (slide.layers || []).length;
+    body.appendChild(section(`Calques libres${nLayers ? ` (${nLayers})` : ''}`, 'fa-solid fa-layer-group', nLayers > 0, layersEditor(slide)));
+
+    // --- Typographie ---
+    body.appendChild(section('Typographie', 'fa-solid fa-font', false, typoEditor(slide)));
+  }
+
+  /** Mise en page : gabarit, fond, variante et blocs détachés. */
+  function layoutEditor(slide, def, st) {
+    const wrap = el(`
+      <div>
+        <div class="row">
+          <div class="field"><label>Gabarit</label><select data-k="layout"></select></div>
+          <div class="field"><label>Fond</label><select data-k="palette"></select></div>
+        </div>
+        <div class="field">
+          <label>Disposition</label>
+          <select data-k="variant">
+            <option value="auto">Automatique (suit le format)</option>
+            <option value="stack">Empilée — titre au-dessus</option>
+            <option value="split">Deux colonnes — titre à gauche</option>
+          </select>
+          <p class="hint" data-variant-note></p>
+        </div>
+        <div data-zones></div>
+      </div>`);
+
+    const layoutSel = wrap.querySelector('[data-k="layout"]');
+    Object.keys(T.LAYOUTS).forEach((k) => layoutSel.add(new Option(T.LAYOUTS[k].label, k, false, k === slide.layout)));
+    layoutSel.addEventListener('change', (e) => {
+      S.commit((s) => {
+        const sl = find(s, slide.id);
+        sl.layout = e.target.value;
+        const d = T.LAYOUTS[e.target.value];
+        if (d.defaults) Object.assign(sl, S.deepMerge({ palette: sl.palette, image: sl.image }, d.defaults));
+        if (d.items && !sl.items.length) {
+          sl.items.push(S.makeItem({ icon: d.items.defaultIcon || 'fa-solid fa-check', title: 'Point clé 1' }));
+        }
+      });
+      onStructure();
     });
 
-    // Liste d'éléments
-    if (def.items) body.appendChild(itemsEditor(slide, def));
+    const palSel = wrap.querySelector('[data-k="palette"]');
+    Object.keys(T.PALETTES).forEach((k) => palSel.add(new Option(T.PALETTE_LABELS[k], k, false, k === slide.palette)));
+    palSel.addEventListener('change', (e) => {
+      S.commit((s) => { find(s, slide.id).palette = e.target.value; });
+      onPreview();
+    });
 
-    // Image
-    if (def.image) body.appendChild(imageEditor(slide));
+    const varSel = wrap.querySelector('[data-k="variant"]');
+    varSel.value = slide.variant || 'auto';
+    const wide = st.format.w / st.format.h >= 1.3;
+    $('[data-variant-note]', wrap).textContent = wide
+      ? 'Ce format est paysage : en automatique, la slide passe en deux colonnes.'
+      : 'Ce format est portrait : en automatique, la slide reste empilée.';
+    varSel.addEventListener('change', () => {
+      S.commit((s) => { find(s, slide.id).variant = varSel.value; });
+      onPreview();
+    });
 
-    // Calques libres
-    body.appendChild(layersEditor(slide));
+    // --- Blocs détachés ---
+    const zones = slide.zones || {};
+    const keys = Object.keys(zones);
+    const zbox = $('[data-zones]', wrap);
+    zbox.appendChild(el(`
+      <p class="hint" style="margin-top:12px">
+        Les blocs du gabarit (titre, contenu, annotation, logo) se déplacent
+        <b>directement dans l’aperçu</b> : glissez-en un et il se détache de la
+        mise en page. Vous pouvez le remettre en place ci-dessous.
+      </p>`));
 
-    // Typographie fine
-    body.appendChild(typoEditor(slide));
+    if (!keys.length) {
+      zbox.appendChild(el('<p class="hint">Aucun bloc détaché : le gabarit décide de tout.</p>'));
+    } else {
+      keys.forEach((k) => {
+        const row = el(`
+          <div class="layer-row">
+            <i class="type fa-solid fa-up-down-left-right"></i>
+            <span>${esc(T.ZONE_LABELS[k] || k)} — libre</span>
+            <button class="btn btn--ghost" data-reset title="Remettre dans la mise en page">
+              <i class="fa-solid fa-rotate-left"></i>
+            </button>
+          </div>`);
+        $('[data-reset]', row).addEventListener('click', () => {
+          S.commit((s) => { delete find(s, slide.id).zones[k]; });
+          window.DGCanvas.setSelected(null);
+          onStructure();
+        });
+        zbox.appendChild(row);
+      });
+      const all = el('<button class="btn btn--block" style="margin-top:6px"><i class="fa-solid fa-rotate-left"></i> Tout remettre en place</button>');
+      all.addEventListener('click', () => {
+        S.commit((s) => { find(s, slide.id).zones = {}; });
+        window.DGCanvas.setSelected(null);
+        onStructure();
+      });
+      zbox.appendChild(all);
+    }
+
+    return wrap;
   }
 
   function find(s, id) { return s.slides.find((x) => x.id === id); }
@@ -288,14 +367,11 @@ window.DGEditor = (function () {
         onStructure();
       });
 
-      const iconBtn = $('.item-row__icon', row);
-      iconBtn.addEventListener('click', () => {
-        const existing = $('.icon-picker', row);
-        if (existing) return existing.remove();
-        row.appendChild(iconPicker(item.icon, (cls) => {
+      $('.item-row__icon', row).addEventListener('click', () => {
+        window.DGIconPicker.open(item.icon, (cls) => {
           S.commit((s) => { find(s, slide.id).items[i].icon = cls; });
           onStructure();
-        }));
+        });
       });
 
       list.appendChild(row);
@@ -311,35 +387,6 @@ window.DGEditor = (function () {
     });
 
     return wrap;
-  }
-
-  /* ---------- Sélecteur d'icônes ---------- */
-
-  function iconPicker(current, pick) {
-    const box = el(`
-      <div class="icon-picker">
-        <input type="text" placeholder="Filtrer (ex. « euro ») ou coller une classe FontAwesome" value="${esc(current || '')}">
-        <div class="icon-grid"></div>
-      </div>`);
-    const input = $('input', box);
-    const grid = $('.icon-grid', box);
-
-    const paint = (filter) => {
-      grid.innerHTML = '';
-      const q = (filter || '').toLowerCase().trim();
-      S.ICONS.filter((c) => !q || c.includes(q)).slice(0, 64).forEach((c) => {
-        const b = el(`<button type="button" title="${esc(c)}"><i class="${esc(c)}"></i></button>`);
-        b.addEventListener('click', () => pick(c));
-        grid.appendChild(b);
-      });
-    };
-    paint('');
-    input.addEventListener('input', () => paint(input.value));
-    // Coller une classe complète l'applique directement
-    input.addEventListener('change', () => {
-      if (/^fa-(solid|regular|brands)\s+fa-[a-z0-9-]+$/.test(input.value.trim())) pick(input.value.trim());
-    });
-    return box;
   }
 
   /* ---------- Éditeur d'image ---------- */
@@ -575,7 +622,7 @@ window.DGEditor = (function () {
 
     const list = $('[data-list]', wrap);
     layers.forEach((l) => {
-      const active = window.DGCanvas.getSelected() === l.id;
+      const active = window.DGCanvas.isSelected('layer', l.id);
       const row = el(`
         <div class="layer-row" data-active="${active}">
           <i class="type ${esc(L.TYPES[l.type].icon)}"></i>
@@ -585,7 +632,7 @@ window.DGEditor = (function () {
         </div>`);
       row.addEventListener('click', (e) => {
         if (e.target.closest('button')) return;
-        window.DGCanvas.setSelected(active ? null : l.id);
+        window.DGCanvas.setSelected(active ? null : { kind: 'layer', key: l.id });
         onStructure();
       });
       $('[data-up]', row).addEventListener('click', () => {
@@ -601,7 +648,7 @@ window.DGEditor = (function () {
           const sl = find(s, slide.id);
           sl.layers = sl.layers.filter((x) => x.id !== l.id);
         });
-        if (window.DGCanvas.getSelected() === l.id) window.DGCanvas.setSelected(null);
+        if (window.DGCanvas.isSelected('layer', l.id)) window.DGCanvas.setSelected(null);
         onStructure();
       });
       list.appendChild(row);
@@ -613,13 +660,13 @@ window.DGEditor = (function () {
       b.addEventListener('click', () => {
         const nl = L.makeLayer(t, { x: 12, y: 60 });
         S.commit((s) => { find(s, slide.id).layers.push(nl); });
-        window.DGCanvas.setSelected(nl.id);
+        window.DGCanvas.setSelected({ kind: 'layer', key: nl.id });
         onStructure();
       });
       add.appendChild(b);
     });
 
-    const sel = layers.find((l) => l.id === window.DGCanvas.getSelected());
+    const sel = layers.find((l) => window.DGCanvas.isSelected('layer', l.id));
     if (sel) $('[data-props]', wrap).appendChild(layerProps(slide, sel));
 
     return wrap;
@@ -683,8 +730,20 @@ window.DGEditor = (function () {
     }
 
     if (layer.type === 'icon') {
-      const f = el(`<div class="field"><label>Icône</label><input type="text" value="${esc(layer.icon || '')}"></div>`);
-      bind($('input', f), 'icon');
+      const f = el(`
+        <div class="field">
+          <label>Icône</label>
+          <button class="btn btn--block" data-pick><i class="${esc(layer.icon || 'fa-solid fa-star')}"></i> Choisir une icône</button>
+        </div>`);
+      $('[data-pick]', f).addEventListener('click', () => {
+        window.DGIconPicker.open(layer.icon, (cls) => {
+          S.commit((s) => {
+            const l = find(s, slide.id).layers.find((x) => x.id === layer.id);
+            if (l) l.icon = cls;
+          });
+          onStructure();
+        });
+      });
       box.appendChild(f);
     }
 
@@ -861,6 +920,12 @@ window.DGEditor = (function () {
           </select>
         </div>
         <div class="field">
+          <label>Baseline</label>
+          <input type="text" data-k="baseline" value="${esc(st.brand.baseline || '')}"
+                 placeholder="Des solutions de gestion adaptées aux…">
+          <p class="hint">Apparaît dans le bandeau de marque, à activer dans les options.</p>
+        </div>
+        <div class="field">
           <label>Police</label>
           <select data-k="font">
             <option value="Inter">Inter</option>
@@ -951,6 +1016,7 @@ window.DGEditor = (function () {
         <label class="switch field"><input type="checkbox" data-k="dots" ${st.options.dots ? 'checked' : ''}> Afficher la pagination (les points)</label>
         <label class="switch field"><input type="checkbox" data-k="watermark" ${st.options.watermark ? 'checked' : ''}> Afficher le site en filigrane sur chaque slide</label>
         <label class="switch field"><input type="checkbox" data-k="credits" ${st.options.credits ? 'checked' : ''}> Créditer l’auteur des photos sur la slide <span style="font-weight:600">(exigé par Unsplash)</span></label>
+        <label class="switch field"><input type="checkbox" data-k="brandBar" ${st.options.brandBar ? 'checked' : ''}> Bandeau de marque en bas de slide <span style="font-weight:600">(logo + baseline)</span></label>
         <div class="field">
           <label>Texte des surbrillances</label>
           <select data-sel="hlContrast">

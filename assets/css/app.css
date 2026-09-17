@@ -97,13 +97,19 @@ body {
 .field input[type="text"],
 .field input[type="number"],
 .field select,
-.field textarea {
+.field textarea,
+.item-row input[type="text"],
+.stock input[type="text"],
+.stock input[type="password"],
+.stock select,
+.stock textarea {
   width: 100%; padding: 9px 11px; font: inherit; font-size: .86rem;
   border: 1px solid var(--app-line); border-radius: 8px; background: #fff;
   color: var(--app-ink); transition: border-color .15s, box-shadow .15s;
 }
 .field textarea { resize: vertical; line-height: 1.45; }
-.field input:focus, .field select:focus, .field textarea:focus {
+.field input:focus, .field select:focus, .field textarea:focus,
+.item-row input:focus, .stock input:focus, .stock select:focus, .stock textarea:focus {
   outline: none; border-color: var(--app-accent);
   box-shadow: 0 0 0 3px rgba(29, 175, 233, .15);
 }
@@ -564,3 +570,234 @@ body {
 .guides-panel .field { margin-bottom: 0; }
 .guides-panel[hidden] { display: none; }
 #guides-toggle[aria-pressed="true"] { background: var(--app-accent); border-color: var(--app-accent); color: #fff; }
+
+/* ============================ COLONNES ET VARIANTES ============================ */
+
+/* Empilé par défaut ; côte à côte dès que le cadre est large. La bascule
+   se joue sur la classe posée par renderSlide, pas sur une media query :
+   l'aperçu est zoomé, sa largeur réelle ne dit rien du format d'export. */
+.slide .cols { display: flex; flex-direction: column; gap: calc(44 * var(--u)); min-height: 0; }
+.slide .col { min-width: 0; }
+
+.slide.is-split .cols {
+  display: grid;
+  grid-template-columns: 1fr 1.05fr;
+  gap: calc(64 * var(--u));
+  align-items: center;
+  flex: 1 1 auto;
+}
+.slide.is-split .grow { display: none; }
+
+/* En paysage, le texte de couverture ne doit pas courir sur toute la largeur :
+   au-delà d'une soixantaine de signes par ligne, la lecture décroche. */
+.slide.is-wide.slide--cover .stack,
+.slide.is-wide.slide--bigtext .stack,
+.slide.is-wide.slide--quote .stack { max-width: 62%; justify-content: center; }
+.slide.is-wide h1 { font-size: calc(80 * var(--u) * var(--ts)); }
+.slide.is-wide .bignum { font-size: calc(150 * var(--u) * var(--ts)); }
+
+/* Image et contenu côte à côte plutôt qu'empilés */
+.slide.is-wide.slide--split,
+.slide.is-wide.slide--outro { flex-direction: row; }
+.slide.is-wide.slide--split .half-top,
+.slide.is-wide.slide--outro .half-top { height: auto; width: 46%; flex: 0 0 46%; }
+.slide.is-wide.slide--split .half-bottom,
+.slide.is-wide.slide--outro .half-bottom { flex: 1; }
+.slide.is-wide.slide--outro .diag {
+  left: auto; right: 100%; top: -12%; bottom: -12%; height: auto;
+  width: calc(180 * var(--u)); transform: rotate(-3.5deg) translateX(50%);
+}
+
+/* ============================ ZONES DÉTACHABLES ============================ */
+
+.slide .zones { position: absolute; inset: 0; z-index: 3; }
+.slide .zone--free { position: absolute; }
+.stage .zone { cursor: grab; }
+.stage .zone:hover { outline: 1px dashed rgba(29, 175, 233, .5); outline-offset: 6px; }
+.stage .zone[data-selected="true"] { outline: 2px solid var(--app-accent); outline-offset: 6px; cursor: move; }
+.stage .zone--free[data-selected="true"]::before {
+  content: 'libre'; position: absolute; left: 0; top: -22px;
+  font: 700 10px/1 Inter, sans-serif; letter-spacing: .06em; text-transform: uppercase;
+  color: #fff; background: var(--app-accent); padding: 4px 6px; border-radius: 3px;
+}
+.stage .zone__handle {
+  position: absolute; right: -7px; bottom: -7px; width: 14px; height: 14px;
+  background: #fff; border: 2px solid var(--app-accent); border-radius: 3px;
+  cursor: nwse-resize; z-index: 5;
+}
+
+/* ============================ BANDEAU DE MARQUE ============================ */
+
+.slide .brandbar {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 5;
+  background: var(--bar-bg); color: var(--bar-fg);
+  display: flex; align-items: center; gap: calc(40 * var(--u));
+  padding: calc(34 * var(--u)) calc(56 * var(--u));
+}
+.slide .brandbar__rule { width: calc(3 * var(--u)); align-self: stretch; background: currentColor; opacity: .35; }
+.slide .brandbar__text { font-size: calc(30 * var(--u) * var(--bs)); font-weight: 700; line-height: 1.25; }
+.slide.has-bar .dots { display: none; }
+/* Le bandeau recouvre le bas : on remonte le contenu d'autant. */
+.slide.has-bar > .stack { padding-bottom: calc(150 * var(--u)); }
+.slide.has-bar.slide--flush .half-bottom { padding-bottom: calc(150 * var(--u)); }
+
+/* ============================ MODALE ============================ */
+
+.modal { position: fixed; inset: 0; z-index: 500; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.modal__backdrop { position: absolute; inset: 0; background: rgba(20, 28, 48, .55); }
+.modal__panel {
+  position: relative; background: #fff; border-radius: 14px; width: min(920px, 100%);
+  max-height: min(760px, 92vh); display: flex; flex-direction: column;
+  box-shadow: 0 30px 70px rgba(16, 24, 44, .3); overflow: hidden;
+}
+.modal__head { display: flex; align-items: center; padding: 18px 22px; border-bottom: 1px solid var(--app-line); }
+.modal__head h2 { flex: 1; font-size: 1rem; font-weight: 800; }
+.modal__tools { display: flex; gap: 12px; padding: 16px 22px; align-items: center; flex-wrap: wrap; }
+.modal__tools .search { flex: 1 1 260px; position: relative; }
+.modal__tools .search i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--app-ink-soft); font-size: .85rem; }
+.modal__tools .search input {
+  width: 100%; padding: 10px 12px 10px 34px; font: inherit; font-size: .88rem;
+  border: 1px solid var(--app-line); border-radius: 9px;
+}
+.modal__tools .search input:focus { outline: none; border-color: var(--app-accent); box-shadow: 0 0 0 3px rgba(29,175,233,.15); }
+.modal__tools select { padding: 10px; border: 1px solid var(--app-line); border-radius: 9px; font: inherit; font-size: .84rem; max-width: 220px; }
+.modal__count { padding: 0 22px 10px; font-size: .75rem; color: var(--app-ink-soft); font-weight: 600; }
+.modal__foot { display: flex; align-items: center; gap: 14px; padding: 14px 22px; border-top: 1px solid var(--app-line); }
+.modal__foot .hint { margin: 0; flex: 1; text-align: right; }
+
+.seg { display: inline-flex; border: 1px solid var(--app-line); border-radius: 9px; overflow: hidden; }
+.seg__btn {
+  border: 0; background: #fff; padding: 10px 14px; font: inherit; font-size: .8rem;
+  font-weight: 700; color: var(--app-ink-soft); cursor: pointer; border-right: 1px solid var(--app-line);
+}
+.seg__btn:last-child { border-right: 0; }
+.seg__btn[aria-pressed="true"] { background: var(--app-brand); color: #fff; }
+
+.icon-wall {
+  flex: 1; overflow-y: auto; padding: 0 22px 8px;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; align-content: start;
+}
+.icon-cell {
+  border: 1px solid transparent; border-radius: 9px; background: #f6f8fd; cursor: pointer;
+  padding: 12px 6px 8px; display: flex; flex-direction: column; align-items: center; gap: 7px;
+  color: var(--app-brand); font: inherit;
+}
+.icon-cell i { font-size: 1.45rem; }
+.icon-cell span {
+  font-size: .62rem; color: var(--app-ink-soft); font-weight: 600; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.icon-cell:hover { background: var(--app-accent); color: #fff; border-color: var(--app-accent); }
+.icon-cell:hover span { color: rgba(255,255,255,.9); }
+.icon-cell[data-current="true"] { border-color: var(--app-accent); background: #e7f6fd; }
+
+/* =========================================================================
+   AÉRATION DE L'INTERFACE
+   Le panneau accumulait trop de contrôles au même niveau visuel. Les réglages
+   secondaires sont désormais repliés derrière des <details> : tout reste
+   accessible, mais l'œil ne voit que ce qui sert le plus souvent.
+   ========================================================================= */
+
+:root { --sidebar-w: 468px; }
+
+.panel { padding: 22px 20px 40px; }
+.field { margin-bottom: 18px; }
+.field > label, .field-label { margin-bottom: 8px; font-size: .7rem; letter-spacing: .05em; }
+.field .hint { margin-top: 7px; line-height: 1.5; }
+.row { gap: 12px; }
+
+.callout { padding: 13px 15px; margin-bottom: 20px; line-height: 1.55; border-radius: 0 10px 10px 0; }
+
+.section-title {
+  margin: 26px 0 14px; padding-bottom: 9px; letter-spacing: .06em;
+  color: var(--app-ink-soft); border-bottom: 1px solid #eef1f7;
+}
+
+/* --- Cartes de slide --- */
+.slide-card { margin-bottom: 12px; border-radius: 12px; }
+.slide-card__head { padding: 9px 10px 9px 6px; gap: 2px; }
+.slide-card__grab { gap: 11px; padding: 6px 0; font-size: .84rem; }
+.slide-card__idx { width: 24px; height: 24px; border-radius: 7px; }
+.slide-card__body { padding: 6px 14px 16px; }
+
+/* --- Sections repliables --- */
+.sect { border-top: 1px solid #eef1f7; }
+.sect:first-of-type { border-top: 0; }
+.sect > summary {
+  list-style: none; cursor: pointer; padding: 13px 2px; display: flex; align-items: center; gap: 10px;
+  font-size: .76rem; font-weight: 800; color: var(--app-brand); text-transform: uppercase; letter-spacing: .05em;
+}
+.sect > summary::-webkit-details-marker { display: none; }
+.sect > summary::after {
+  content: '\f078'; font-family: 'Font Awesome 6 Free'; font-weight: 900;
+  margin-left: auto; font-size: .62rem; color: #b7c0d6; transition: transform .18s;
+}
+.sect[open] > summary::after { transform: rotate(180deg); }
+.sect > summary:hover { color: var(--app-accent); }
+.sect > summary i { color: #9aa6c2; width: 14px; text-align: center; }
+.sect[open] > summary i { color: var(--app-accent); }
+.sect__body { padding: 4px 0 18px; }
+.sect__body > *:last-child { margin-bottom: 0; }
+
+.switch.sect-top {
+  padding: 10px 12px; background: #f7f9fd; border-radius: 9px; margin-bottom: 6px; font-size: .8rem;
+}
+
+/* --- Éléments de liste --- */
+.items-editor { gap: 10px; }
+.item-row { padding: 10px; border-radius: 9px; }
+.item-row__top { margin-bottom: 8px; }
+.item-row__icon { width: 38px; height: 38px; border-radius: 8px; font-size: .95rem; }
+.item-row__icon:hover { border-color: var(--app-accent); color: var(--app-accent); }
+
+.layer-row { padding: 9px 11px; margin-bottom: 8px; border-radius: 9px; }
+.stock { padding: 14px; border-radius: 10px; margin-bottom: 16px; }
+.btn-grid { gap: 10px; }
+.swatches { gap: 12px; }
+.presets { gap: 10px; }
+
+/* --- Barre d'outils --- */
+.toolbar { height: 58px; flex: 0 0 58px; gap: 10px; padding: 0 18px; }
+.toolbar .chip { padding: 6px 12px; }
+.board { padding: 36px; gap: 34px; }
+.guides-panel { padding: 16px 18px; gap: 20px; }
+
+/* =========================================================================
+   PROPORTIONS EN PAYSAGE
+   L'unité --u suit la plus petite dimension : sur un 1200×630, elle vaut
+   0,58 et la typographie calibrée pour du portrait devient chétive au regard
+   de la largeur disponible. On la recale ici, format par format d'usage.
+   ========================================================================= */
+
+.slide.is-wide h2 { font-size: calc(84 * var(--u) * var(--ts)); }
+.slide.is-wide .lead { font-size: calc(50 * var(--u) * var(--bs)); }
+.slide.is-wide .eyebrow { font-size: calc(30 * var(--u) * var(--bs)); }
+.slide.is-wide .it b { font-size: calc(42 * var(--u) * var(--bs)); }
+.slide.is-wide .it span { font-size: calc(33 * var(--u) * var(--bs)); }
+.slide.is-wide .ico { width: calc(76 * var(--u)); height: calc(76 * var(--u)); font-size: calc(34 * var(--u)); }
+.slide.is-wide .ico--plain { width: calc(86 * var(--u)); height: auto; font-size: calc(66 * var(--u)); }
+.slide.is-wide .items { gap: calc(24 * var(--u)); }
+.slide.is-wide .note { font-size: calc(58 * var(--u) * var(--bs)); }
+.slide.is-wide .stat b { font-size: calc(132 * var(--u) * var(--ts)); }
+.slide.is-wide .cta { font-size: calc(38 * var(--u) * var(--bs)); }
+
+.slide.is-wide .brandbar { gap: calc(46 * var(--u)); padding: calc(38 * var(--u)) calc(60 * var(--u)); }
+.slide.is-wide .brandbar__text { font-size: calc(42 * var(--u) * var(--bs)); }
+.slide.is-wide .brandbar .logo--sm img { height: calc(100 * var(--u)); }
+.slide.is-wide .brandbar .logo--sm b { font-size: calc(68 * var(--u)); }
+.slide.is-wide.has-bar > .stack { padding-bottom: calc(185 * var(--u)); }
+.slide.is-wide.has-bar.slide--flush .half-bottom { padding-bottom: calc(185 * var(--u)); }
+
+/* La couverture en paysage : bloc de texte centré verticalement, pas collé
+   au logo. Le logo reste en haut, comme un en-tête. */
+.slide.is-wide.slide--cover .stack { justify-content: center; }
+.slide.is-wide.slide--cover .zone[data-zone="brand"] { position: absolute; top: 0; left: 0; }
+.slide.is-wide.slide--cover .grow { display: none; }
+.slide.is-wide.slide--cover .lead { margin-top: calc(22 * var(--u)); }
+
+/* Respiration entre le bloc titre et le contenu, en empilé uniquement :
+   en deux colonnes, c'est la gouttière de la grille qui s'en charge. */
+.slide.is-stack .cols > .col > .zone[data-zone="head"] { margin-bottom: calc(6 * var(--u)); }
+.slide .numrow { margin-bottom: 0; }
+.slide.is-stack .numrow { margin-bottom: calc(14 * var(--u)); }
+.slide .zone[data-zone="head"] h2 + .lead { margin-top: calc(24 * var(--u)); }
