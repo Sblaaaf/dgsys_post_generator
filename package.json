@@ -1,0 +1,11 @@
+{
+  "name": "dgsys-post-generator",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Générateur de carrousels pour réseaux sociaux : templates, charte graphique, export PNG/PDF.",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "serve": "npx --yes http-server -p 8080 -c-1 ."
+  }
+}

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DGsys — Générateur de carrousels</title>
+  <meta name="description" content="Générateur de carrousels pour réseaux sociaux : templates, charte graphique, export PNG/PDF.">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=Caveat:wght@600;700&family=Poppins:wght@400;600;700;800;900&family=Montserrat:wght@400;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+
+  <!-- ============================ PANNEAU DE CONTRÔLE ============================ -->
+  <aside class="sidebar">
+    <div class="sidebar__head">
+      <div class="sidebar__mark"><i class="fa-solid fa-layer-group"></i></div>
+      <div>
+        <h1>Générateur de carrousels</h1>
+        <p>Templates · charte · export multi-format</p>
+      </div>
+    </div>
+
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" data-tab="content" aria-selected="true" aria-controls="panel-content">
+        <i class="fa-solid fa-pen-to-square"></i> Contenu
+      </button>
+      <button class="tab" role="tab" data-tab="design" aria-selected="false" aria-controls="panel-design">
+        <i class="fa-solid fa-palette"></i> Design
+      </button>
+      <button class="tab" role="tab" data-tab="ai" aria-selected="false" aria-controls="panel-ai">
+        <i class="fa-solid fa-wand-magic-sparkles"></i> IA
+      </button>
+      <button class="tab" role="tab" data-tab="export" aria-selected="false" aria-controls="panel-export">
+        <i class="fa-solid fa-download"></i> Export
+      </button>
+    </div>
+
+    <div class="panel" id="panel-content" role="tabpanel" data-active="true"></div>
+    <div class="panel" id="panel-design" role="tabpanel" data-active="false"></div>
+    <div class="panel" id="panel-ai"     role="tabpanel" data-active="false"></div>
+    <div class="panel" id="panel-export" role="tabpanel" data-active="false"></div>
+  </aside>
+
+  <!-- ============================ ZONE DE TRAVAIL ============================ -->
+  <main class="stage-area">
+    <div class="toolbar">
+      <label for="doc-name" class="sr-only" style="position:absolute;left:-9999px">Nom du carrousel</label>
+      <input type="text" id="doc-name" class="field" style="width:230px;padding:7px 10px;border:1px solid var(--app-line);border-radius:8px;font-weight:700;font-size:.85rem">
+
+      <button class="btn btn--ghost" id="undo" title="Annuler (Ctrl+Z)" aria-label="Annuler"><i class="fa-solid fa-rotate-left"></i></button>
+      <button class="btn btn--ghost" id="redo" title="Rétablir (Ctrl+Maj+Z)" aria-label="Rétablir"><i class="fa-solid fa-rotate-right"></i></button>
+      <button class="btn" id="autofit" title="Réduire la typo des slides qui débordent">
+        <i class="fa-solid fa-text-height"></i> Auto-ajuster
+      </button>
+
+      <div class="toolbar__spacer"></div>
+
+      <span class="chip" id="count"></span>
+      <label for="zoom" style="font-size:.72rem;font-weight:700;color:var(--app-ink-soft)">Zoom</label>
+      <input type="range" id="zoom" min="180" max="520" step="10" style="width:120px;accent-color:var(--app-accent)">
+    </div>
+
+    <div class="board" id="board"></div>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <!-- Bibliothèques d'export (CDN). L'application reste utilisable sans elles :
+       seuls les boutons d'export afficheront un message d'erreur explicite. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <!-- Scripts classiques (pas de modules ES) : la page fonctionne aussi
+       en double-cliquant le fichier, sans serveur. -->
+  <script src="assets/js/templates.js"></script>
+  <script src="assets/js/store.js"></script>
+  <script src="assets/js/smart.js"></script>
+  <script src="assets/js/exporter.js"></script>
+  <script src="assets/js/editor.js"></script>
+  <script src="assets/js/app.js"></script>
+</body>
+</html>

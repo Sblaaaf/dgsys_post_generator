@@ -1,0 +1,33 @@
+# Deux services indépendants :
+#   web → sert la page statique (aucune dépendance, aucun build)
+#   ai  → proxy Claude, seul détenteur de la clé API
+#
+# Démarrage :  cp .env.example .env  &&  docker compose up
+# L'interface est alors sur http://localhost:8080
+#
+# Le service « ai » est facultatif : sans lui, le générateur heuristique
+# embarqué dans la page fonctionne toujours.
+services:
+  web:
+    image: nginx:1.27-alpine
+    container_name: dgsys-post-web
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    volumes:
+      # Lecture seule : le conteneur ne peut pas modifier vos sources.
+      - ./index.html:/usr/share/nginx/html/index.html:ro
+      - ./assets:/usr/share/nginx/html/assets:ro
+    restart: unless-stopped
+
+  ai:
+    build: ./server
+    container_name: dgsys-post-ai
+    ports:
+      - "${AI_PORT:-8787}:8787"
+    environment:
+      # Jamais de valeur en dur ici : la clé vient du fichier .env, non versionné.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?Définissez ANTHROPIC_API_KEY dans .env}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-5}
+      ALLOWED_ORIGIN: ${ALLOWED_ORIGIN:-http://localhost:8080}
+      PORT: 8787
+    restart: unless-stopped
