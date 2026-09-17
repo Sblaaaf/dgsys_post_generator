@@ -448,3 +448,55 @@ body {
   .sidebar { width: 100%; flex: none; max-height: 52vh; border-right: 0; border-bottom: 1px solid var(--app-line); }
   .board { padding: 18px; }
 }
+
+/* ============================ GLISSER-DÉPOSER ============================ */
+
+.slide-card__handle {
+  flex: 0 0 auto; width: 18px; display: grid; place-items: center;
+  color: #b7c0d6; cursor: grab; font-size: .8rem;
+}
+.slide-card__handle:active { cursor: grabbing; }
+.slide-card:hover .slide-card__handle { color: var(--app-brand); }
+.slide-card[data-dragging="true"] { opacity: .4; }
+
+/* Trait d'insertion pendant le déplacement d'une slide */
+.drop-marker {
+  height: 3px; border-radius: 3px; background: var(--app-accent);
+  margin: 3px 0; box-shadow: 0 0 0 3px rgba(29, 175, 233, .18);
+}
+
+/* Cadre survolé par un fichier en cours de dépôt */
+.frame[data-drop-target="true"] .stage { outline: 3px dashed var(--app-accent); outline-offset: 4px; }
+.frame[data-drop-target="true"]::after {
+  content: 'Déposer l’image ici'; position: absolute; inset: auto 0 50% 0;
+  text-align: center; font-size: .8rem; font-weight: 800; color: var(--app-accent);
+  pointer-events: none;
+}
+.frame { position: relative; }
+
+/* ============================ BANQUE D'IMAGES ============================ */
+
+.img-preview { border: 1px solid var(--app-line); border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
+.img-preview img { display: block; width: 100%; height: 110px; object-fit: cover; }
+.img-preview__meta {
+  display: flex; align-items: center; gap: 8px; padding: 5px 6px 5px 10px;
+  font-size: .72rem; color: var(--app-ink-soft); background: #fafbfe;
+}
+.img-preview__meta span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.stock { border: 1px solid var(--app-line); border-radius: 8px; padding: 10px; background: #fafbfe; margin-bottom: 12px; }
+.stock a { color: var(--app-accent); }
+.stock-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; max-height: 260px; overflow-y: auto; }
+.stock-thumb {
+  aspect-ratio: 4 / 5; border: 1px solid var(--app-line); border-radius: 6px;
+  overflow: hidden; padding: 0; background: #eef1f8; cursor: pointer; position: relative;
+}
+.stock-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.stock-thumb:hover { border-color: var(--app-accent); }
+.stock-thumb[data-busy="true"] { opacity: .5; cursor: wait; }
+
+/* Crédit photo incrusté sur la slide */
+.slide .credit {
+  position: absolute; left: calc(52 * var(--u)); bottom: calc(46 * var(--u)); z-index: 3;
+  font-size: calc(20 * var(--u)); font-weight: 600; opacity: .7;
+}

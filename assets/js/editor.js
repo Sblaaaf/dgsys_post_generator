@@ -55,7 +55,19 @@ window.DGEditor = (function () {
         </div>`));
     }
 
-    st.slides.forEach((slide, i) => root.appendChild(slideCard(slide, i, st)));
+    const list = el('<div id="slide-list"></div>');
+    st.slides.forEach((slide, i) => list.appendChild(slideCard(slide, i, st)));
+    root.appendChild(list);
+
+    // Le glisser-déposer double les boutons monter/descendre, il ne les remplace
+    // pas : le DnD natif HTML5 est inaccessible au clavier.
+    window.DGDnd.initList(list, {
+      itemSelector: '.slide-card',
+      onMove: (from, to) => {
+        S.commit((s) => { s.slides.splice(to, 0, s.slides.splice(from, 1)[0]); });
+        onStructure();
+      },
+    });
 
     const adder = el(`
       <div class="field" style="margin-top:14px">
@@ -101,6 +113,8 @@ window.DGEditor = (function () {
     const card = el(`
       <div class="slide-card" data-open="${slide.id === openId}" data-hidden="${!slide.visible}">
         <div class="slide-card__head">
+          <span class="slide-card__handle" data-drag-handle draggable="true"
+                title="Glisser pour réordonner" aria-hidden="true"><i class="fa-solid fa-grip-vertical"></i></span>
           <button class="slide-card__grab" aria-expanded="${slide.id === openId}">
             <span class="slide-card__idx">${index + 1}</span>
             <span class="slide-card__name">${esc((slide.title || def.label).replace(/\*\*/g, '')) || def.label}</span>
@@ -329,15 +343,28 @@ window.DGEditor = (function () {
 
   function imageEditor(slide) {
     const img = slide.image || {};
+    const credit = img.credit;
     const wrap = el(`
       <div>
         <div class="section-title"><i class="fa-regular fa-image"></i> Image</div>
-        <label class="upload field">
-          <input type="file" accept="image/*" aria-label="Importer une image">
-          <span class="upload__ui"><i class="fa-solid fa-arrow-up-from-bracket"></i>
-            ${img.src ? 'Remplacer l’image' : 'Importer une image'}</span>
-        </label>
-        ${img.src ? '<button class="btn btn--block btn--danger" data-clear style="margin-bottom:12px"><i class="fa-regular fa-trash-can"></i> Retirer l’image</button>' : ''}
+        <div class="btn-grid" style="margin-bottom:10px">
+          <label class="upload">
+            <input type="file" accept="image/*" aria-label="Importer une image">
+            <span class="upload__ui" style="padding:10px"><i class="fa-solid fa-arrow-up-from-bracket"></i> Importer</span>
+          </label>
+          <button class="btn" data-search><i class="fa-solid fa-magnifying-glass"></i> Chercher</button>
+        </div>
+        <p class="hint" style="margin-top:-4px">Vous pouvez aussi glisser un fichier directement sur la slide dans l’aperçu.</p>
+        ${img.src ? `
+          <div class="img-preview">
+            <img src="${esc(img.src)}" alt="">
+            <div class="img-preview__meta">
+              ${credit && credit.author
+                ? `<span>© ${esc(credit.author)}${credit.source ? ' · ' + esc(credit.source) : ''}</span>`
+                : '<span>Image importée</span>'}
+              <button class="btn btn--ghost btn--danger" data-clear aria-label="Retirer l’image"><i class="fa-regular fa-trash-can"></i></button>
+            </div>
+          </div>` : ''}
         <div class="field">
           <label>Voile de lisibilité <span style="font-weight:600;text-transform:none">— assombrit pour que le texte reste lisible</span></label>
           <div class="range">
@@ -372,21 +399,27 @@ window.DGEditor = (function () {
       if (!file) return;
       try {
         const src = await window.DGExport.readImageFile(file);
-        S.commit((s) => { find(s, slide.id).image.src = src; });
+        S.commit((s) => { const im = find(s, slide.id).image; im.src = src; im.credit = null; });
         onStructure();
       } catch (err) {
         window.DGToast(err.message, 'error');
       }
     });
 
+    $('[data-search]', wrap).addEventListener('click', (e) => {
+      const open = $('.stock', wrap);
+      if (open) { open.remove(); return; }
+      e.target.closest('div').insertAdjacentElement('afterend', stockPanel(slide));
+    });
+
     const clearBtn = $('[data-clear]', wrap);
     if (clearBtn) clearBtn.addEventListener('click', () => {
-      S.commit((s) => { find(s, slide.id).image.src = null; });
+      S.commit((s) => { const im = find(s, slide.id).image; im.src = null; im.credit = null; });
       onStructure();
     });
 
     const ranges = wrap.querySelectorAll('input[type="range"]');
-    const bindRange = (input, key, suffix) => {
+    const bindRange = (input, key) => {
       const out = input.nextElementSibling;
       input.addEventListener('input', () => {
         out.textContent = Math.round(parseFloat(input.value) * 100) + ' %';
@@ -411,6 +444,110 @@ window.DGEditor = (function () {
     });
 
     return wrap;
+  }
+
+  /* ---------- Recherche dans une banque d'images ---------- */
+
+  function stockPanel(slide) {
+    const K = window.DGStock;
+    const box = el(`
+      <div class="stock">
+        <div class="row">
+          <div class="field" style="margin-bottom:8px">
+            <label>Banque</label>
+            <select data-src></select>
+          </div>
+          <div class="field" style="margin-bottom:8px">
+            <label>Recherche</label>
+            <input type="text" data-q placeholder="boulangerie, pain, atelier…">
+          </div>
+        </div>
+        <div data-keyfield></div>
+        <p class="hint" data-note style="margin-bottom:8px"></p>
+        <button class="btn btn--accent btn--block" data-go><i class="fa-solid fa-magnifying-glass"></i> Chercher</button>
+        <p class="hint" data-status style="margin-top:8px"></p>
+        <div class="stock-grid" data-grid></div>
+        <button class="btn btn--block" data-more style="margin-top:8px;display:none">Charger plus de résultats</button>
+      </div>`);
+
+    const srcSel = $('[data-src]', box);
+    Object.keys(K.SOURCES).forEach((k) => srcSel.add(new Option(K.SOURCES[k].label, k)));
+
+    const keyField = $('[data-keyfield]', box);
+    const note = $('[data-note]', box);
+    const status = $('[data-status]', box);
+    const grid = $('[data-grid]', box);
+    const more = $('[data-more]', box);
+    let page = 1;
+
+    function refreshSource() {
+      const src = srcSel.value;
+      const def = K.SOURCES[src];
+      note.innerHTML = esc(def.note) + ` <a href="${esc(def.signup)}" target="_blank" rel="noopener">En savoir plus</a>`;
+      keyField.innerHTML = '';
+      if (def.needsKey) {
+        const f = el(`
+          <div class="field" style="margin-bottom:8px">
+            <label>Clé ${esc(def.label)}</label>
+            <input type="password" placeholder="Collez votre clé" value="${esc(K.getKey(src))}" autocomplete="off">
+            <p class="hint">Stockée dans ce navigateur uniquement, et jamais incluse dans un projet exporté.</p>
+          </div>`);
+        $('input', f).addEventListener('change', (e) => K.setKey(src, e.target.value.trim()));
+        keyField.appendChild(f);
+      }
+    }
+    srcSel.addEventListener('change', () => { refreshSource(); grid.innerHTML = ''; more.style.display = 'none'; });
+    refreshSource();
+
+    async function run(append) {
+      const q = $('[data-q]', box).value;
+      if (!q.trim()) return window.DGToast('Saisissez un mot-clé.', 'error');
+      page = append ? page + 1 : 1;
+      status.textContent = 'Recherche…';
+      if (!append) grid.innerHTML = '';
+      try {
+        const results = await K.search(srcSel.value, q, page);
+        status.textContent = results.length ? '' : 'Aucun résultat.';
+        more.style.display = results.length ? 'block' : 'none';
+        results.forEach((r) => grid.appendChild(thumb(r, slide)));
+      } catch (err) {
+        status.textContent = '';
+        window.DGToast(err.message, 'error');
+      }
+    }
+    $('[data-go]', box).addEventListener('click', () => run(false));
+    $('[data-q]', box).addEventListener('keydown', (e) => { if (e.key === 'Enter') run(false); });
+    more.addEventListener('click', () => run(true));
+
+    return box;
+  }
+
+  function thumb(result, slide) {
+    const b = el(`
+      <button type="button" class="stock-thumb" title="${esc((result.credit && result.credit.author) || '')}">
+        <img src="${esc(result.thumb)}" alt="" loading="lazy">
+      </button>`);
+    b.addEventListener('click', async () => {
+      b.dataset.busy = 'true';
+      window.DGToast('Téléchargement de l’image…');
+      try {
+        // Conversion immédiate en data: URL — sans cela le canvas serait
+        // « teinté » et l'export échouerait au moment le plus gênant.
+        const src = await window.DGStock.fetchAsDataURL(result.full);
+        S.commit((s) => {
+          const im = find(s, slide.id).image;
+          im.src = src;
+          im.credit = result.credit || null;
+        });
+        onStructure();
+        window.DGToast('Image appliquée.');
+      } catch (err) {
+        window.DGToast(err.message, 'error');
+      } finally {
+        b.removeAttribute('data-busy');
+      }
+    });
+    return b;
   }
 
   /* ---------- Typographie ---------- */
@@ -618,6 +755,7 @@ window.DGEditor = (function () {
         <div class="section-title"><i class="fa-solid fa-sliders"></i> Options</div>
         <label class="switch field"><input type="checkbox" data-k="dots" ${st.options.dots ? 'checked' : ''}> Afficher la pagination (les points)</label>
         <label class="switch field"><input type="checkbox" data-k="watermark" ${st.options.watermark ? 'checked' : ''}> Afficher le site en filigrane sur chaque slide</label>
+        <label class="switch field"><input type="checkbox" data-k="credits" ${st.options.credits ? 'checked' : ''}> Créditer l’auteur des photos sur la slide <span style="font-weight:600">(exigé par Unsplash)</span></label>
         <div class="field">
           <label>Texte des surbrillances</label>
           <select data-sel="hlContrast">

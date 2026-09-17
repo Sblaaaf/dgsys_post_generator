@@ -73,7 +73,7 @@
       cta: '',
       note: '',
       items: [],
-      image: { src: null, overlay: 0.6, pos: 'center', zoom: 1, gradient: false },
+      image: { src: null, overlay: 0.6, pos: 'center', zoom: 1, gradient: false, credit: null },
       style: { titleScale: 1, bodyScale: 1, titleWeight: 900, align: 'left', iconShape: 'circle' },
     };
     return deepMerge(base, over || {});
@@ -93,7 +93,7 @@
         logoMode: 'text', // 'text' | 'image' | 'both' | 'none'
         colors: Object.assign({}, BRAND_PRESETS.dgsys.colors),
       },
-      options: { dots: true, watermark: false, hlContrast: 'auto' },
+      options: { dots: true, watermark: false, hlContrast: 'auto', credits: false },
       slides: [],
     };
   }

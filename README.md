@@ -11,38 +11,24 @@ pas de compte à créer. Double-cliquez `index.html` et ça fonctionne.
 
 ## Démarrage
 
-### Option A — ouvrir le fichier (le plus rapide)
-
 ```bash
 git clone <url-du-depot> && cd dgsys_post_generator
-# puis ouvrez index.html dans votre navigateur
 ```
 
-Tout fonctionne : édition, aperçu, export. Seules les polices et les icônes
-sont chargées depuis un CDN, donc une connexion est nécessaire au premier
-affichage.
+Puis **ouvrez `index.html`** dans votre navigateur. C'est tout : pas de build,
+pas de serveur, pas de compte, pas de conteneur. Les fichiers du dossier
+`assets/` sont chargés en relatif, comme des `<script>` classiques — ce qui
+fonctionne aussi bien en `file://` qu'en HTTP.
 
-### Option B — Docker (recommandé, et requis pour l'assistant Claude)
+Seules les polices et les icônes viennent d'un CDN : prévoyez une connexion au
+premier affichage, ensuite le navigateur les met en cache.
+
+Si vous préférez un vrai serveur local (recommandé si vous utilisez la banque
+d'images, certains navigateurs restreignant les requêtes réseau en `file://`) :
 
 ```bash
-cp .env.example .env     # renseignez ANTHROPIC_API_KEY si vous voulez l'assistant
-docker compose up
+npm run serve      # http://localhost:8080
 ```
-
-- Interface : <http://localhost:8080>
-- Service IA : <http://localhost:8787/health>
-
-Le service `ai` est **facultatif**. Sans clé API, le générateur heuristique
-embarqué dans la page structure déjà un carrousel complet à partir d'un texte.
-
-Variables d'environnement (voir `.env.example`) :
-
-| Variable | Défaut | Rôle |
-|---|---|---|
-| `ANTHROPIC_API_KEY` | — | Clé API Anthropic. Requise pour le service `ai` uniquement. |
-| `ANTHROPIC_MODEL` | `claude-opus-5` | Modèle utilisé pour la génération. |
-| `ALLOWED_ORIGIN` | `http://localhost:8080` | Seule origine autorisée à appeler le service (CORS). |
-| `WEB_PORT` / `AI_PORT` | `8080` / `8787` | Ports exposés sur la machine hôte. |
 
 ---
 
@@ -54,10 +40,12 @@ assets/css/app.css      Interface + moteur de rendu des slides
 assets/js/templates.js  Registre des mises en page et des palettes
 assets/js/store.js      État, historique (annuler/rétablir), sauvegarde locale
 assets/js/smart.js      Analyse de texte → carrousel (100 % hors ligne)
+assets/js/llm.js        Pont vers un chat ou une API compatible OpenAI
+assets/js/stock.js      Recherche d'images (Openverse, Pexels, Unsplash)
+assets/js/dnd.js        Glisser-déposer : slides et fichiers images
 assets/js/editor.js     Construction du panneau d'édition
 assets/js/exporter.js   Capture et export PNG / ZIP / PDF / JSON
 assets/js/app.js        Assemblage, aperçu, raccourcis
-server/                 Proxy Claude (Node 20 + Express), optionnel
 test/                   Tests unitaires (lanceur intégré de Node, zéro dépendance)
 ```
 
@@ -100,23 +88,65 @@ il n'y a aucune interface à écrire.
 ## Utilisation
 
 ### Onglet Contenu
-Ajouter, réordonner, dupliquer, masquer des slides. Chaque slide a sa mise en
+Ajouter, réordonner, dupliquer, masquer des slides. Le réordonnancement se fait
+à la poignée (glisser-déposer) **ou** aux boutons fléchés : les deux coexistent
+volontairement, le glisser-déposer natif HTML5 n'étant pas utilisable au clavier. Chaque slide a sa mise en
 page, son fond, ses éléments, son image et ses réglages typographiques.
 
 Encadrez un fragment de `**doubles astérisques**` pour le mettre en surbrillance.
 Un seul fragment par titre, de préférence à la fin : c'est ce qui donne le rythme
 visuel des carrousels efficaces.
 
+### Images
+Trois façons d'en mettre une : le bouton **Importer**, le bouton **Chercher**
+(Openverse sans inscription, Pexels ou Unsplash avec une clé gratuite), ou
+simplement **glisser un fichier sur la slide** dans l'aperçu.
+
+Toute image choisie dans une banque est immédiatement téléchargée, redimensionnée
+et convertie en `data:` URL. Ce n'est pas un détail : une image affichée depuis
+une URL distante « teinte » le canvas et fait échouer l'export au pire moment.
+En la convertissant tout de suite, le projet devient aussi autonome et exportable
+hors ligne. Si un serveur refuse le téléchargement (CORS), l'application le dit
+sur-le-champ plutôt que de vous laisser découvrir le problème à l'export.
+
+Les clés d'API sont rangées séparément de l'état du projet : un `.json` exporté
+ou partagé ne contient jamais de secret. L'option *Créditer l'auteur des photos*
+incruste la mention sur la slide — c'est exigé par la licence Unsplash.
+
 ### Onglet Design
 Format de destination, couleurs de marque (six chartes fournies), logo, police,
 pagination, filigrane.
 
 ### Onglet IA
-Collez un texte brut. L'analyseur repère les titres, les listes, les décomptes
-(« 3 indicateurs pour… »), les chiffres clés, les appels à l'action, et choisit
-une mise en page par section. Il attribue aussi une icône par mot-clé.
+
+**Générateur local (par défaut).** Collez un texte brut. L'analyseur repère les
+titres, les listes, les décomptes (« 3 indicateurs pour… »), les chiffres clés,
+les appels à l'action, et choisit une mise en page par section. Il attribue aussi
+une icône par mot-clé. Aucune clé, aucun réseau, aucun coût.
 
 Une ligne vide sépare deux slides ; une ligne commençant par `-` devient un point clé.
+
+**Pont copier-coller.** L'application fabrique un prompt complet ; vous le collez
+dans ChatGPT gratuit, Le Chat, Gemini ou n'importe quel chat, et vous recollez la
+réponse. Le lecteur tolère le bavardage et les blocs de code — il extrait le JSON.
+
+**Appel direct à une API.** Même format pour OpenAI, Groq, OpenRouter, et pour
+**Ollama** ou **LM Studio** en local. Ces deux derniers sont gratuits, illimités
+et hors ligne : c'est l'option à préférer si le budget est le critère.
+
+> **À savoir** : il n'existe pas d'API gratuite donnant accès à ChatGPT.
+> L'abonnement ChatGPT et l'API OpenAI (`platform.openai.com`) sont deux produits
+> distincts, et l'API est facturée à l'usage. C'est exactement ce que le pont
+> copier-coller contourne.
+
+Dans tous les cas, la réponse du modèle est filtrée avant d'entrer dans
+l'application : layout inconnu, palette inventée, classe d'icône douteuse ou
+champ hors schéma sont écartés. Un modèle ne peut pas injecter n'importe quoi
+dans votre carrousel.
+
+Une clé saisie ici reste dans votre navigateur et n'est jamais exportée. Elle
+demeure toutefois lisible par quiconque a accès à la page : ne publiez pas cette
+application en ligne avec une clé enregistrée.
 
 ### Onglet Export
 
@@ -134,80 +164,18 @@ déborde. Un triangle d'alerte signale ces slides dans l'aperçu.
 
 ---
 
-## Le service IA
-
-### Pourquoi un serveur pour une page statique
-
-Une clé API placée dans du JavaScript de navigateur est lisible par n'importe
-quel visiteur, et utilisable à vos frais. Elle reste donc côté serveur ; le
-navigateur ne connaît qu'un point d'entrée sans secret.
-
-Le service impose par ailleurs :
-- une **liste blanche de mises en page** définie côté serveur, pas côté client ;
-- un **schéma JSON strict** appliqué à la réponse du modèle (`output_config.format`) ;
-- une **validation de sortie** avant renvoi au navigateur — le modèle ne peut pas
-  injecter de classe CSS ou de valeur arbitraire ;
-- une **limitation de débit** par IP et une taille de requête plafonnée.
-
-> La limitation de débit est en mémoire : elle est remise à zéro à chaque
-> redémarrage et ne se partage pas entre instances. C'est suffisant pour un
-> usage interne ; pour une exposition publique, passez sur Redis.
-
-### Appeler le service
-
-```bash
-curl -X POST http://localhost:8787/api/generate \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "text": "Vos pertes en boulangerie\nElles coûtent plus que vous ne le pensez.\n\nLes sources de pertes\n- Matières premières mal utilisées\n- Erreurs de fabrication",
-    "brief": "Ton pédagogique, cible artisans boulangers",
-    "maxSlides": 6,
-    "maxItems": 5,
-    "brand": { "name": "DGsys", "website": "dgsys.fr" }
-  }'
-```
-
-Le même appel en `fetch` :
-
-```js
-const res = await fetch('http://localhost:8787/api/generate', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    text,
-    brief: 'Ton pédagogique, cible artisans boulangers',
-    maxSlides: 6,
-    maxItems: 5,
-    brand: { name: 'DGsys', website: 'dgsys.fr' },
-  }),
-});
-if (!res.ok) throw new Error(await res.text());
-const carrousel = await res.json(); // { name, slides: [...] }
-```
-
-Réponse :
-
-```json
-{
-  "name": "Vos pertes en boulangerie",
-  "slides": [
-    { "layout": "cover", "palette": "dark", "title": "Vos pertes en boulangerie",
-      "subtitle": "Elles coûtent **plus que vous ne le pensez**", "items": [] }
-  ]
-}
-```
-
----
-
 ## Tests
 
 ```bash
 npm test          # node --test test/*.test.js — aucune dépendance
 ```
 
-Les tests couvrent l'analyse de texte (découpage, détection des chiffres clés,
-attribution d'icônes, plafonds) et le rendu (échappement HTML, dimensions
-d'export, surbrillance).
+36 tests couvrant :
+- l'analyse de texte — découpage en sections, détection des chiffres clés,
+  attribution d'icônes, plafonds d'éléments et de slides ;
+- le rendu — échappement HTML, dimensions d'export, surbrillance ;
+- le pont vers un modèle — extraction du JSON noyé dans du bavardage ou un bloc
+  de code, et filtrage des valeurs hors schéma renvoyées par un modèle.
 
 ---
 
@@ -225,6 +193,11 @@ d'export, surbrillance).
 - **Polices** : Inter, Caveat, Poppins, Montserrat et Space Grotesk sont chargées
   depuis Google Fonts. Pour une police sous licence, ajoutez la déclaration
   `@font-face` dans `index.html` et l'entrée correspondante dans le sélecteur.
+- **Openverse** sert des fichiers hébergés par des tiers dont beaucoup refusent
+  le téléchargement depuis un navigateur. Pexels et Unsplash sont plus fiables
+  pour cet usage. En cas de refus, enregistrez l'image puis importez-la.
+- **Ollama en local** doit autoriser l'origine de la page :
+  `OLLAMA_ORIGINS="*" ollama serve` (ou l'origine précise en production).
 
 ## Pistes d'évolution
 
@@ -232,10 +205,7 @@ Par ordre de rapport valeur / effort :
 
 1. **Rendu serveur** avec Playwright ou Satori : exports parfaits (plus de
    contournements `html2canvas`), et génération en masse par API.
-2. **Réordonnancement par glisser-déposer** en complément des boutons actuels,
-   qui restent nécessaires pour l'accessibilité clavier.
-3. **Banque d'images intégrée** (Unsplash, Pexels) — attention alors aux
-   restrictions CORS à l'export : les images distantes doivent être converties
-   en `data:` avant capture.
-4. **Bibliothèque de marques** : plusieurs chartes enregistrées, une par client.
-5. **Rendu vidéo** des slides (transitions) pour les Reels, via `ffmpeg.wasm`.
+2. **Bibliothèque de marques** : plusieurs chartes enregistrées, une par client.
+3. **Grilles et repères magnétiques** dans l'aperçu, pour aligner des blocs
+   à la main quand le template ne suffit pas.
+4. **Rendu vidéo** des slides (transitions) pour les Reels, via `ffmpeg.wasm`.

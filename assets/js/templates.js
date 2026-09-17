@@ -429,10 +429,15 @@
     const mark = ctx.state.options.watermark && ctx.state.brand.website
       ? `<div class="mark">${esc(ctx.state.brand.website)}</div>` : '';
 
+    // Certaines licences (Unsplash notamment) imposent de créditer l'auteur.
+    const cr = slide.image && slide.image.credit;
+    const credit = ctx.state.options.credits && cr && cr.author
+      ? `<div class="credit">© ${esc(cr.author)}${cr.source ? ' · ' + esc(cr.source) : ''}</div>` : '';
+
     return `<div class="slide slide--${esc(slide.layout)}${def.flush ? ' slide--flush' : ''}" `
       + `style="${vars};${extra}" data-id="${esc(slide.id)}" role="img" `
       + `aria-label="${esc((slide.title || def.label).replace(/\*\*/g, ''))}">`
-      + def.render(slide, ctx) + mark + '</div>';
+      + def.render(slide, ctx) + mark + credit + '</div>';
   }
 
   return { LAYOUTS, PALETTES, PALETTE_LABELS, renderSlide, esc, fmt, contrast, readableOn };

@@ -155,16 +155,18 @@
   function renderAI(root) {
     if (root.dataset.built === 'true') return;
     root.dataset.built = 'true';
+    const L = window.DGLLM;
+
     root.innerHTML = `
       <div class="callout">
         Collez un texte brut — un brouillon de post, des notes, un plan.
-        L’analyseur détecte les titres, les listes, les chiffres et les appels à l’action,
+        L’analyseur détecte titres, listes, chiffres et appels à l’action,
         puis choisit une mise en page par section. <b>Tout se passe dans votre navigateur.</b>
       </div>
 
       <div class="field">
         <label for="ai-text">Votre contenu</label>
-        <textarea id="ai-text" rows="13" placeholder="Titre du sujet
+        <textarea id="ai-text" rows="12" placeholder="Titre du sujet
 Une phrase d'accroche qui pose le problème.
 
 Quelles sont les principales sources de pertes ?
@@ -176,7 +178,7 @@ Quelles sont les principales sources de pertes ?
 - Taux de pertes : perdu / produit x 100
 
 Découvrez nos solutions sur dgsys.fr"></textarea>
-        <p class="hint">Une ligne vide sépare deux slides. Une ligne qui commence par « - » devient un point clé.</p>
+        <p class="hint">Une ligne vide sépare deux slides. Une ligne commençant par « - » devient un point clé.</p>
       </div>
 
       <div class="row">
@@ -197,42 +199,163 @@ Découvrez nos solutions sur dgsys.fr"></textarea>
         <i class="fa-solid fa-wand-magic-sparkles"></i> Générer le carrousel
       </button>
 
-      <div class="section-title"><i class="fa-solid fa-robot"></i> Assistant Claude (optionnel)</div>
-      <div class="callout callout--warn">
-        <b>Sécurité :</b> ne mettez jamais une clé API dans une page web — elle serait
-        lisible par n’importe qui. Le service <code>server/</code> fourni garde la clé côté serveur
-        et n’expose qu’un point d’entrée <code>/api/generate</code>.
-      </div>
-      <div class="field">
-        <label for="ai-proxy">URL du service</label>
-        <input type="text" id="ai-proxy" value="http://localhost:8787" placeholder="http://localhost:8787">
-        <p class="hint">Lancez-le avec <code>docker compose up</code>. Hors ligne, le générateur local ci-dessus reste pleinement fonctionnel.</p>
+      <div class="section-title"><i class="fa-solid fa-arrow-right-arrow-left"></i> Passer par un chat (gratuit)</div>
+      <div class="callout">
+        L’application prépare le prompt, vous le collez dans <b>ChatGPT, Le Chat, Gemini</b>
+        ou n’importe quel chat, et vous recollez la réponse ici.
+        Aucune clé, aucun coût, aucun appel réseau depuis cette page.
       </div>
       <div class="field">
         <label for="ai-brief">Intention éditoriale (facultatif)</label>
         <input type="text" id="ai-brief" placeholder="Ton pédagogique, cible : artisans boulangers">
       </div>
-      <button class="btn btn--block" id="ai-claude">
-        <i class="fa-solid fa-sparkles"></i> Réécrire et structurer avec Claude
-      </button>
+      <div class="btn-grid">
+        <button class="btn btn--primary" id="ai-copy"><i class="fa-regular fa-copy"></i> Copier le prompt</button>
+        <button class="btn" id="ai-show"><i class="fa-regular fa-eye"></i> Le voir</button>
+      </div>
+      <div class="field" style="margin-top:12px">
+        <label for="ai-paste">Réponse du chat</label>
+        <textarea id="ai-paste" rows="5" placeholder="Collez ici la réponse JSON du chat…"></textarea>
+      </div>
+      <button class="btn btn--block" id="ai-apply"><i class="fa-solid fa-check"></i> Appliquer la réponse</button>
+
+      <div class="section-title"><i class="fa-solid fa-plug"></i> Appel direct à une API (optionnel)</div>
+      <div class="callout callout--warn">
+        Il n’existe pas d’API gratuite donnant accès à ChatGPT : l’abonnement et
+        l’API OpenAI sont deux produits distincts, et l’API est facturée à l’usage.
+        Pour du gratuit et illimité, choisissez <b>Ollama</b> ou <b>LM Studio</b> —
+        le modèle tourne alors sur votre machine.
+      </div>
+      <div class="field">
+        <label for="ai-provider">Fournisseur</label>
+        <select id="ai-provider"></select>
+        <p class="hint" id="ai-provider-note"></p>
+      </div>
+      <div class="row">
+        <div class="field"><label for="ai-base">URL de l’API</label><input type="text" id="ai-base"></div>
+        <div class="field"><label for="ai-model">Modèle</label><input type="text" id="ai-model"></div>
+      </div>
+      <div class="field" id="ai-key-field">
+        <label for="ai-key">Clé</label>
+        <input type="password" id="ai-key" autocomplete="off" placeholder="Collez votre clé">
+        <p class="hint">
+          Stockée dans ce navigateur uniquement, jamais incluse dans un projet exporté.
+          Une clé placée dans une page web reste lisible par quiconque y a accès :
+          ne publiez pas cette page en ligne avec une clé enregistrée.
+        </p>
+      </div>
+      <button class="btn btn--block" id="ai-call"><i class="fa-solid fa-paper-plane"></i> Générer via l’API</button>
       <p class="hint" id="ai-status" style="margin-top:8px"></p>`;
 
-    $('#ai-run', root).addEventListener('click', () => {
-      const text = $('#ai-text', root).value;
-      if (!text.trim()) return window.DGToast('Le texte est vide.', 'error');
+    const opts = () => {
       const st = S.get();
-      const res = window.DGSmart.build(text, {
+      return {
+        text: $('#ai-text', root).value,
+        brief: $('#ai-brief', root).value,
         maxItems: Number($('#ai-items', root).value) || 5,
         maxSlides: Number($('#ai-slides', root).value) || 8,
         cover: $('#ai-cover', root).checked,
         outro: $('#ai-outro', root).checked,
         website: st.brand.website,
         brandName: st.brand.name,
-      });
-      applyGenerated(res, $('#ai-replace', root).checked);
+      };
+    };
+
+    // --- Générateur local ---
+    $('#ai-run', root).addEventListener('click', () => {
+      const o = opts();
+      if (!o.text.trim()) return window.DGToast('Le texte est vide.', 'error');
+      applyGenerated(window.DGSmart.build(o.text, o), $('#ai-replace', root).checked);
     });
 
-    $('#ai-claude', root).addEventListener('click', () => callClaude(root));
+    // --- Pont copier-coller ---
+    $('#ai-copy', root).addEventListener('click', async () => {
+      const o = opts();
+      if (!o.text.trim()) return window.DGToast('Le texte est vide.', 'error');
+      const prompt = L.buildPrompt(o);
+      try {
+        await navigator.clipboard.writeText(prompt);
+        window.DGToast('Prompt copié — collez-le dans votre chat.');
+      } catch (e) {
+        // clipboard indisponible (http non sécurisé, file://) : repli manuel
+        showPrompt(prompt);
+        window.DGToast('Copie automatique refusée par le navigateur : sélectionnez le texte affiché.', 'error');
+      }
+    });
+
+    $('#ai-show', root).addEventListener('click', () => showPrompt(L.buildPrompt(opts())));
+
+    function showPrompt(text) {
+      let box = $('#ai-prompt-box', root);
+      if (box) { box.remove(); return; }
+      box = el(`<div class="field" id="ai-prompt-box" style="margin-top:10px">
+        <label>Prompt à copier</label><textarea rows="8" readonly></textarea></div>`);
+      $('textarea', box).value = text;
+      $('#ai-show', root).closest('.btn-grid').insertAdjacentElement('afterend', box);
+      $('textarea', box).select();
+    }
+
+    $('#ai-apply', root).addEventListener('click', () => {
+      const raw = $('#ai-paste', root).value;
+      const o = opts();
+      try {
+        const data = L.sanitize(L.extractJSON(raw), o.maxSlides, o.maxItems);
+        applyGenerated(data, $('#ai-replace', root).checked);
+      } catch (err) {
+        window.DGToast(err.message, 'error');
+      }
+    });
+
+    // --- Appel direct ---
+    const provSel = $('#ai-provider', root);
+    Object.keys(L.PROVIDERS).forEach((k) => provSel.add(new Option(L.PROVIDERS[k].label, k)));
+    const cfg = L.loadConfig();
+
+    function fillProvider(key, useSaved) {
+      const p = L.PROVIDERS[key];
+      $('#ai-provider-note', root).textContent = p.note;
+      $('#ai-base', root).value = useSaved && cfg.baseUrl ? cfg.baseUrl : p.baseUrl;
+      $('#ai-model', root).value = useSaved && cfg.model ? cfg.model : p.model;
+      $('#ai-key', root).value = useSaved ? (cfg.apiKey || '') : '';
+      $('#ai-key-field', root).style.display = p.needsKey ? '' : 'none';
+    }
+    provSel.value = L.PROVIDERS[cfg.provider] ? cfg.provider : 'ollama';
+    fillProvider(provSel.value, true);
+    provSel.addEventListener('change', () => fillProvider(provSel.value, false));
+
+    $('#ai-call', root).addEventListener('click', async () => {
+      const o = opts();
+      if (!o.text.trim()) return window.DGToast('Le texte est vide.', 'error');
+      const conf = {
+        provider: provSel.value,
+        baseUrl: $('#ai-base', root).value.trim(),
+        model: $('#ai-model', root).value.trim(),
+        apiKey: $('#ai-key', root).value.trim(),
+      };
+      L.saveConfig(conf);
+
+      const btn = $('#ai-call', root);
+      const status = $('#ai-status', root);
+      btn.disabled = true;
+      status.textContent = 'Génération en cours…';
+      try {
+        const content = await L.complete(conf, L.buildPrompt(o));
+        const data = L.sanitize(L.extractJSON(content), o.maxSlides, o.maxItems);
+        applyGenerated(data, $('#ai-replace', root).checked);
+        status.textContent = '';
+      } catch (err) {
+        status.textContent = '';
+        window.DGToast(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  }
+
+  function el(html) {
+    const d = document.createElement('div');
+    d.innerHTML = html.trim();
+    return d.firstElementChild;
   }
 
   /** Fusionne le résultat du générateur dans l'état, en complétant les valeurs par défaut. */
@@ -251,46 +374,9 @@ Découvrez nos solutions sur dgsys.fr"></textarea>
     E.openId = null;
     switchTab('content');
     renderAll();
+    const nameInput = $('#doc-name');
+    if (nameInput) nameInput.value = S.get().name;
     window.DGToast(`${res.slides.length} slides générées.`);
-  }
-
-  async function callClaude(root) {
-    const status = $('#ai-status', root);
-    const btn = $('#ai-claude', root);
-    const text = $('#ai-text', root).value.trim();
-    if (!text) return window.DGToast('Le texte est vide.', 'error');
-
-    const base = $('#ai-proxy', root).value.replace(/\/+$/, '');
-    btn.disabled = true;
-    status.textContent = 'Appel en cours…';
-    try {
-      const st = S.get();
-      const r = await fetch(base + '/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text,
-          brief: $('#ai-brief', root).value,
-          maxSlides: Number($('#ai-slides', root).value) || 8,
-          maxItems: Number($('#ai-items', root).value) || 5,
-          brand: { name: st.brand.name, website: st.brand.website },
-          layouts: Object.keys(T.LAYOUTS),
-        }),
-      });
-      if (!r.ok) throw new Error(`Le service a répondu ${r.status} — ${(await r.text()).slice(0, 180)}`);
-      const data = await r.json();
-      applyGenerated(data, $('#ai-replace', root).checked);
-      status.textContent = 'Carrousel généré par Claude.';
-    } catch (err) {
-      status.textContent = '';
-      window.DGToast(
-        /Failed to fetch/i.test(err.message)
-          ? 'Service injoignable. Démarrez-le avec « docker compose up », ou utilisez le générateur local.'
-          : err.message,
-        'error');
-    } finally {
-      btn.disabled = false;
-    }
   }
 
   /* --------------------------- Panneau Export --------------------------- */
@@ -458,6 +544,29 @@ Découvrez nos solutions sur dgsys.fr`;
     $('#undo').addEventListener('click', () => { if (S.undo()) { E.openId = null; renderAll(); } });
     $('#redo').addEventListener('click', () => { if (S.redo()) { E.openId = null; renderAll(); } });
     $('#autofit').addEventListener('click', autoFit);
+
+    // Dépôt d'un fichier image directement sur une slide de l'aperçu
+    window.DGDnd.initDropZone($('#board'), {
+      frameSelector: '.frame',
+      onDrop: async (frame, file) => {
+        const idx = Array.from($('#board').children).indexOf(frame);
+        const st = S.get();
+        const slide = st.slides[idx];
+        if (!slide) return;
+        if (!T.LAYOUTS[slide.layout].image) {
+          return window.DGToast(
+            `La mise en page « ${T.LAYOUTS[slide.layout].label} » n’accepte pas d’image.`, 'error');
+        }
+        try {
+          const src = await X.readImageFile(file);
+          S.commit((s) => { const im = s.slides[idx].image; im.src = src; im.credit = null; });
+          renderAll();
+          window.DGToast('Image appliquée.');
+        } catch (err) {
+          window.DGToast(err.message, 'error');
+        }
+      },
+    });
 
     const zoom = $('#zoom');
     zoom.value = previewWidth;
